@@ -1,0 +1,67 @@
+﻿{
+module Lexer
+
+// SUPER IMPORTANT SUPER IMPORTANT SUPER IMPORTANT
+// Don't forget to run fslex with --unicode. Otherwise
+// you will get confusing errors.
+
+// Opens methods related to fslex.exe
+open Microsoft.FSharp.Text.Lexing
+open Tokens
+open System
+open System.Text
+
+let newline (lexbuf : LexBuffer<_>) = lexbuf.StartPos <- lexbuf.StartPos.NextLine in
+
+let lexeme lexbuf = LexBuffer<byte>.LexemeString lexbuf in
+
+}
+
+let digit = ['0'-'9']
+let whitespace = [' ' '\t' ]
+let newline = ('\n' | '\r' '\n')
+
+
+rule token = parse
+| whitespace     { token lexbuf }
+| newline        { newline lexbuf; token lexbuf }
+| "true"         { TRUE }
+| "false"        { FALSE }
+| "fun"          { FUN }
+| ":"            { COLON }
+| "="            { EQUAL }
+| "@"			 { AT }
+| "."	         { DOT }
+| "of"			 { OF }
+| "case"		 { CASE }
+| "inl"          { INL }
+| "inr"          { INR }
+| "->"           { TO }
+| "cap"          { CAP }
+| "uncap"        { UNCAP }
+| ","		     { COMMA }
+| "+"            { PLUS }
+| "-"            { MINUS }
+| "fst"          { FST }
+| "snd"          { SND }
+| "inl"          { INL }
+| "inr"          { INR }
+| "iget"         { IGET }
+| "iset"         { ISET }
+| "extract"      { EXTRACT }
+| "cons"         { CONS }
+| "bot"          { BOT }
+| "join"         { JOIN }
+| "?"            { QUESTION }
+| "*"            { ASTERISK }
+| "("            { LPAREN}
+| ")"            { RPAREN }
+| "in"           { IN }
+| "let"          { LET }
+| "end"			 { END }
+| 'K''-'['a'-'z']+ { CONST(lexeme lexbuf) }
+| ['a'-'z']+     { ID(lexeme lexbuf) }
+| ['-']?digit+   { INT (Int32.Parse(lexeme lexbuf)) }
+| ['-']?digit+('.'digit+)?(['e''E']digit+)?   { FLOAT (Double.Parse(lexeme lexbuf)) }
+| eof            { EOF }
+

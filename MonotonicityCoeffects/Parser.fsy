@@ -1,0 +1,52 @@
+﻿%{
+open Ast
+%}
+
+%start start
+%token <string> ID CONST
+%token <System.Int32> INT
+%token <System.Double> FLOAT
+%token TRUE FALSE FUN COLON EQUAL 
+%token BOT JOIN EXTRACT CONS IGET ISET 
+%token AT DOT PLUS MINUS QUESTION ASTERISK LPAREN RPAREN IN LET END EOF FST SND COMMA OF CASE
+%token INL INR TO CAP UNCAP
+%type < Ast.Prog > start
+
+%%
+
+start: Expr EOF { $1 }
+
+ExprList : ExprList Expr { App($1, $2) }
+    | Expr { $1 } 
+
+Expr: LPAREN ExprList RPAREN     { $2 }
+    | INT                        { Int($1) }
+	| FLOAT                      { Float($1) }
+	| LPAREN FUN ID COLON Ty AT Scalar DOT Expr RPAREN 
+	  { Abs($2, $4, $6, $8) }
+	| LET ID EQUAL Expr IN Expr END { LET($2,$4,$6) }
+	| CONST { Const($1) }
+	| ID { Var($1) }
+	| BOT Ty { Bot($1) }
+	| JOIN Ty Expr Expr { Join($2, $3, $4) }
+	| EXTRACT Expr Expr Expr { Extract($2, $3, $4) }
+	| CONS Expr Expr Expr { Cons($2, $3, $4) }
+	| FST Expr { Fst($2) }
+	| SND Expr { Snd($2) }
+	| LPAREN Expr COMMA Expr RPAREN { Pair($2, $4) }
+	| CASE LPAREN Ty COMMA Ty RPAREN Expr OF INL ID TO Expr INR ID TO Expr 
+	  { Case($3, $5, $7, $10, $12, $14, $16) }
+	| INL Ty Ty Expr { Inl($2,$3,$4) }
+	| INR Ty Ty Expr { Inr($2,$3,$4) }
+	| CAP Scalar Expr { Cap($2, $3) }
+	| UNCAP Expr { Uncap($2) }
+	| ISET Expr { ISet($2) }
+	| IGET Expr Expr { IGet($2, $3) }
+	| LET ID EQUAL Expr IN Expr { Let($2, $4, $6) }
+
+Scalar: PLUS         { CoeffectMonotone }
+      | MINUS        { CoeffectAntitone }
+	  | ASTERISK     { CoeffectRobust }
+	  | QUESTION     { CoeffectAny }
+
+Ty: ID { $1 }
