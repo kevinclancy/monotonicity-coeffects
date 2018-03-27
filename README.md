@@ -1,6 +1,6 @@
 # Prerequisites
 
-This project requires .NET core. To install .NET core on linux, follow the directions 
+This project requires .NET core version 2.0 or higher. To install .NET core on linux, follow the directions 
 [here](https://docs.microsoft.com/en-us/dotnet/core/linux-prerequisites?tabs=netcore2x).
 
 # Running
