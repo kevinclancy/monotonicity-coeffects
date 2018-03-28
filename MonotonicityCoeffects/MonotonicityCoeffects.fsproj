@@ -1,0 +1,27 @@
+﻿
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Tokens.fs" />
+    <Compile Include="Ast.fs" />
+    <Compile Include="Lexer.fs" />
+    <Compile Include="Program.fs" />
+    
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Lexer.fsl" />
+    <None Include="Parser.fsy" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FsLexYacc" Version="7.0.6" />
+    <PackageReference Include="FsLexYacc.Runtime" Version="7.0.6" />
+  </ItemGroup>
+
+</Project>
