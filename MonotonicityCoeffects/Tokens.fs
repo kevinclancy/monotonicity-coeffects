@@ -3,7 +3,7 @@
 open System.Linq
 open System
 
-type Token = 
+type token = 
     | TRUE
     | FALSE
     | FUN
@@ -19,6 +19,7 @@ type Token =
     | SND
     | OF
     | CASE
+    | PIPE
     | COMMA
     | INL
     | INR

@@ -7,8 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Tokens.fs" />
     <Compile Include="Ast.fs" />
+    <Compile Include="Typecheck.fs" />
+    <Compile Include="Parser.fs" />
     <Compile Include="Lexer.fs" />
     <Compile Include="Program.fs" />
     
@@ -16,6 +17,7 @@
 
   <ItemGroup>
     <None Include="Lexer.fsl" />
+    <None Include="test.tb" />
     <None Include="Parser.fsy" />
   </ItemGroup>
 

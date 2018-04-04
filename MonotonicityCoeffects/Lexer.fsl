@@ -7,11 +7,11 @@ module Lexer
 
 // Opens methods related to fslex.exe
 open Microsoft.FSharp.Text.Lexing
-open Tokens
+open Parser
 open System
 open System.Text
 
-let newline (lexbuf : LexBuffer<_>) = lexbuf.StartPos <- lexbuf.StartPos.NextLine in
+let newline (lexbuf : LexBuffer<_>) = lexbuf.EndPos <- lexbuf.EndPos.NextLine in
 
 let lexeme lexbuf = LexBuffer<byte>.LexemeString lexbuf in
 
@@ -21,18 +21,31 @@ let digit = ['0'-'9']
 let whitespace = [' ' '\t' ]
 let newline = ('\n' | '\r' '\n')
 
-
 rule token = parse
-| whitespace     { token lexbuf }
 | newline        { newline lexbuf; token lexbuf }
+| whitespace     { token lexbuf }
 | "true"         { TRUE }
 | "false"        { FALSE }
 | "fun"          { FUN }
+| "forall"       { FORALL }
+| "Forall"       { BIGFORALL }
 | ":"            { COLON }
+| ";"            { SEMICOLON }
+| "types"        { TYPES }
+| "forall"       { FORALL }
+| "TOSET"        { TOSET }
+| "PROSET"       { PROSET }
+| "SEMILATTICE"  { SEMILATTICE }
+| "{"            { LBRACK }
+| "}"            { RBRACK }
 | "="            { EQUAL }
+| "!"            { BANG }
 | "@"			 { AT }
 | "."	         { DOT }
 | "of"			 { OF }
+| "|>"           { DICT }
+| "#"            { HASH }
+| "|"            { PIPE }
 | "case"		 { CASE }
 | "inl"          { INL }
 | "inr"          { INR }
@@ -59,8 +72,8 @@ rule token = parse
 | "in"           { IN }
 | "let"          { LET }
 | "end"			 { END }
-| 'K''-'['a'-'z']+ { CONST(lexeme lexbuf) }
-| ['a'-'z']+     { ID(lexeme lexbuf) }
+| 'K''-'['a'-'z''A'-'Z']+ { CONST(lexeme lexbuf) }
+| ['a'-'z''A'-'Z']+     { ID(lexeme lexbuf) }
 | ['-']?digit+   { INT (Int32.Parse(lexeme lexbuf)) }
 | ['-']?digit+('.'digit+)?(['e''E']digit+)?   { FLOAT (Double.Parse(lexeme lexbuf)) }
 | eof            { EOF }
