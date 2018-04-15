@@ -50,6 +50,7 @@ rule token = parse
 | "inl"          { INL }
 | "inr"          { INR }
 | "->"           { TO }
+| "=>"           { IMPLIES }
 | "cap"          { CAP }
 | "uncap"        { UNCAP }
 | ","		     { COMMA }

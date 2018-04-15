@@ -1,6 +1,9 @@
 ﻿module Ast
 
 open Microsoft.FSharp.Text.Lexing
+open System
+
+type Range = Position * Position
 
 type Coeffect =
   | CoeffectMonotone
@@ -15,16 +18,20 @@ type Coeffect =
     | CoeffectRobust -> "*"
     | CoeffectAny -> "?"
 
+type ProperKind =
+    | Toset 
+    | Proset
+    | Semilattice
+
+    override this.ToString() =
+        match this with
+        | Toset -> "TOSET"
+        | Proset -> "PROSET"
+        | Semilattice -> "SEMILATTICE"                
+
 type Kind =
-  | Toset
-  | Proset
-  | Semilattice
-  
-  override this.ToString() =
-    match this with
-    | Toset -> "TOSET"
-    | Proset -> "PROSET"
-    | Semilattice -> "SEMILATTICE"
+  | KProper of Set<ProperKind> * Range
+  | KOperator of dom : ProperKind * cod : Kind * Range
 
 let noPos : Position = {
     pos_fname = ""
@@ -32,6 +39,8 @@ let noPos : Position = {
     pos_bol = 0
     pos_cnum = 0
 }
+
+let noRange = (noPos, noPos)
 
 type Ty =
   | BaseTy of name : string * pos : (Position * Position)
@@ -73,36 +82,33 @@ type Ty =
         | ForallTy(varId, kind, body,_) ->
             "(Forall (" + varId + " : " + kind.ToString() + "). " + body.ToString() + ")"
 
-            
-        
-
 type Expr =
-  | Int of int
-  | Float of float
-  | Forall of tyVar : string * kind : Kind * body : Expr
-  | Abs of var : string * ty : Ty * scalar : Coeffect * body : Expr
-  | App of fn : Expr * arg : Expr
-  | Const of name : string
-  | Var of name : string
-  | Bot of ty : Ty
-  | Join of ty : Ty * e1 : Expr * e2 : Expr
-  /// The eliminator for semilattice dictionaries
-  | Extract of key : string * value : string * acc : string * dict : Expr * body : Expr
+  | Int of int * Range
+  | Float of float * Range
+  | Forall of tyVar : string * kind : Kind * body : Expr * Range
+  | Abs of var : string * ty : Ty * scalar : Coeffect * body : Expr * Range
+  | App of fn : Expr * arg : Expr * Range
+  | Const of name : string * Range
+  | Var of name : string * Range
+  | Bot of ty : Ty * Range
+  | Join of ty : Ty * e1 : Expr * e2 : Expr * Range
+  /// The eliminator for semilattice dictionaries 
+  | Extract of key : string * value : string * acc : string * dict : Expr * body : Expr * Range
   /// The constructor for semilattice dictionaries
-  | Cons of e1 : Expr * e2 : Expr * e3 :Expr
-  | Fst of pair : Expr
-  | Snd of pair : Expr
-  | Pair of fst : Expr * snd : Expr
+  | Cons of e1 : Expr * e2 : Expr * e3 :Expr * Range
+  | Fst of pair : Expr * Range
+  | Snd of pair : Expr * Range
+  | Pair of fst : Expr * snd : Expr * Range
   | Case of scrutTyL : Ty * scrutTyR : Ty * scrut : Expr * lname : string * 
-            lElim : Expr * rname : string * rElim : Expr 
-  | Inl of lty : Ty * rTy : Ty * e : Expr
-  | Inr of lty : Ty * rTy : Ty * e : Expr 
-  | Cap of q : Coeffect * e : Expr
-  | Uncap of e : Expr
+            lElim : Expr * rname : string * rElim : Expr * Range
+  | Inl of lty : Ty * rTy : Ty * e : Expr * Range
+  | Inr of lty : Ty * rTy : Ty * e : Expr * Range
+  | Cap of q : Coeffect * e : Expr * Range
+  | Uncap of e : Expr * Range
   /// Constructor for ivars
-  | ISet of e : Expr
+  | ISet of e : Expr * Range
   /// Destructor for IVars
-  | IGet of contentsBinder : string * ivar : Expr * elim : Expr 
-  | Let of var : string * bound : Expr * body : Expr
+  | IGet of contentsBinder : string * ivar : Expr * elim : Expr * Range 
+  | Let of var : string * bound : Expr * body : Expr * Range
 
   type Prog = { typeAliases : Map<string, Ty> ; exprAliases : Map<string,Expr> ; body : Expr }
