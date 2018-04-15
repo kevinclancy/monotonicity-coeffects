@@ -8,11 +8,19 @@ open Microsoft.FSharp.Text.Parsing.ParseHelpers
 open System.IO
 open Parser
 open Typecheck
+open Ast
 open System
+open Kindcheck
 
-let baseTyMap = Set<string>(["Nat"; "MinNat"; "Unit"; "Bool"])
+let baseTyMap = 
+    Map<string, Kind>(
+        [("Nat", KProper(Set [Semilattice; Toset; Proset], noRange)); 
+         ("MinNat", KProper(Set [Semilattice; Toset; Proset], noRange)); 
+         ("Unit", KProper(Set [Semilattice; Toset; Proset], noRange));
+         ("Bool", KProper(Set [Semilattice; Toset; Proset], noRange))])
+
 let tyVarEnv = Map.empty
-let tenv = (tyVarEnv, baseTyMap)
+let tenv = { tyVarEnv = tyVarEnv ; tyBaseEnv = baseTyMap }
 
 let rec printStack (stack : List<string*Range>) =
     match stack with
@@ -36,7 +44,7 @@ let main argv =
             printfn "Parse error. Line: %d, Column: %d" (lexbuffer.StartPos.Line + 1) lexbuffer.StartPos.Column
             exit 1
 
-        match Typecheck.kCheckSemilattice tenv ty with
+        match Kindcheck.kCheckSemilattice tenv ty with
         | Some(stack) ->
             printStack stack
         | None ->

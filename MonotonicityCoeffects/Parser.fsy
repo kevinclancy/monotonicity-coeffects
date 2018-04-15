@@ -14,9 +14,9 @@ open Ast
 %token BOT JOIN EXTRACT CONS IGET ISET 
 %token AT DOT PLUS MINUS QUESTION ASTERISK LPAREN RPAREN IN LET END EOF FST SND COMMA OF CASE 
 %token INL INR TO CAP UNCAP PIPE TYPES SEMICOLON LBRACK RBRACK BANG
-%token HASH DICT TOSET PROSET SEMILATTICE FORALL BIGFORALL
+%token HASH DICT TOSET PROSET SEMILATTICE FORALL BIGFORALL IMPLIES
 
-%right TO DICT PLUS ASTERISK 
+%right TO DICT PLUS ASTERISK IMPLIES
 
 %%
 
@@ -27,37 +27,42 @@ TypeAlias : ID EQUAL Ty SEMICOLON { ($1,$3) }
 TypeAliasList : TypeAliasList SEMICOLON TypeAlias { $3 :: $1 }
               | TypeAlias { [$1] }
 
-Kind : TOSET { Toset }
-	 | PROSET { Proset }
-	 | SEMILATTICE { Semilattice }
+ProperKindPrime : TOSET { Toset }
+		        | PROSET { Proset }
+		        | SEMILATTICE { Semilattice }
 
-ExprList : ExprList Expr { App($1,$2) }
+ProperKind : ProperKindPrime { KProper(Set [$1 ; Proset], parseState.ResultRange) }
+
+Kind : ProperKind { $1 }
+     | ProperKindPrime IMPLIES Kind { KOperator($1,$3,parseState.ResultRange) }
+
+ExprList : ExprList Expr { App($1,$2, parseState.ResultRange) }
          | Expr { $1 }
 
-Expr: INT                        { Int($1) }
-	| FLOAT                      { Float($1) }
+Expr: INT                        { Int($1, parseState.ResultRange) }
+	| FLOAT                      { Float($1, parseState.ResultRange) }
 	| LPAREN FUN Scalar ID COLON Ty DOT Expr RPAREN 
-	  { Abs($4, $6, $3, $8) }
-	| LET ID EQUAL Expr IN Expr END { Let($2,$4,$6) }
-	| CONST { Const($1) }
-	| ID { Var($1) }
-	| BOT Ty { Bot($2) }
-	| LPAREN FORALL ID COLON Kind IN Expr END { Forall($3,$5,$7) }
-	| JOIN Ty Expr Expr { Join($2, $3, $4) }
-	| CONS Expr Expr Expr { Cons($2, $3, $4) }
-	| FST Expr { Fst($2) }
-	| SND Expr { Snd($2) }
+	  { Abs($4, $6, $3, $8, parseState.ResultRange) }
+	| LET ID EQUAL Expr IN Expr END { Let($2,$4,$6, parseState.ResultRange) }
+	| CONST { Const($1, parseState.ResultRange) }
+	| ID { Var($1, parseState.ResultRange) }
+	| BOT Ty { Bot($2, parseState.ResultRange) }
+	| LPAREN FORALL ID COLON ProperKind IN Expr END { Forall($3,$5,$7, parseState.ResultRange) }
+	| JOIN Ty Expr Expr { Join($2, $3, $4, parseState.ResultRange) }
+	| CONS Expr Expr Expr { Cons($2, $3, $4, parseState.ResultRange) }
+	| FST Expr { Fst($2, parseState.ResultRange) }
+	| SND Expr { Snd($2, parseState.ResultRange) }
 	| LPAREN ExprList RPAREN { $2 }
-	| LPAREN Expr COMMA Expr RPAREN { Pair($2, $4) }
+	| LPAREN Expr COMMA Expr RPAREN { Pair($2, $4, parseState.ResultRange) }
 	| CASE LPAREN Ty COMMA Ty RPAREN Expr OF INL ID TO Expr INR ID TO Expr 
-	  { Case($3, $5, $7, $10, $12, $14, $16) }
-	| INL Ty Ty Expr { Inl($2,$3,$4) }
-	| INR Ty Ty Expr { Inr($2,$3,$4) }
-	| CAP Scalar Expr { Cap($2, $3) }
-	| UNCAP Expr { Uncap($2) }
-	| ISET Expr { ISet($2) }
-	| LET PIPE ID PIPE EQUAL Expr IN Expr END { IGet($3, $6, $8) }
-	| LET CONS ID ID ID EQUAL Expr IN Expr END { Extract($3,$4,$5,$7,$9) }
+	  { Case($3, $5, $7, $10, $12, $14, $16, parseState.ResultRange) }
+	| INL Ty Ty Expr { Inl($2,$3,$4, parseState.ResultRange) }
+	| INR Ty Ty Expr { Inr($2,$3,$4, parseState.ResultRange) }
+	| CAP Scalar Expr { Cap($2, $3, parseState.ResultRange) }
+	| UNCAP Expr { Uncap($2, parseState.ResultRange) }
+	| ISET Expr { ISet($2, parseState.ResultRange) }
+	| LET PIPE ID PIPE EQUAL Expr IN Expr END { IGet($3, $6, $8, parseState.ResultRange) }
+	| LET CONS ID ID ID EQUAL Expr IN Expr END { Extract($3,$4,$5,$7,$9, parseState.ResultRange) }
 
 Scalar: PLUS         { CoeffectMonotone }
       | MINUS        { CoeffectAntitone }
