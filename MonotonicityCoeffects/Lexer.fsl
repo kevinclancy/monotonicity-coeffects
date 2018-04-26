@@ -43,13 +43,14 @@ rule token = parse
 | "@"			 { AT }
 | "."	         { DOT }
 | "of"			 { OF }
+| "to"			 { TO }
 | "|>"           { DICT }
 | "#"            { HASH }
 | "|"            { PIPE }
 | "case"		 { CASE }
 | "inl"          { INL }
 | "inr"          { INR }
-| "->"           { TO }
+| "->"           { ARROW }
 | "=>"           { IMPLIES }
 | "cap"          { CAP }
 | "uncap"        { UNCAP }
