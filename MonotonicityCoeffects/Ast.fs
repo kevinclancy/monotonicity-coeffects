@@ -124,6 +124,8 @@ type Ty =
   | TyAlias of name : string * pos : (Position * Position)
   /// Type abstraction
   | ForallTy of varId : string * kind : ProperKind * body : Ty * pos : (Position * Position)
+  // Monotone partiality monad
+  | Partial of ty : Ty * pos : Range
 
   static member IsEquiv (a : Ty) (b : Ty) : SubtypeResult =
     let errorMsg = "Type " + a.ToString() + " is not equivalent to " + b.ToString()
@@ -229,7 +231,12 @@ type Ty =
                 Failure [errorMsg + ": kind " + aKind.ToString() + " distinct from " + bKind.ToString()]
         | false ->
             Failure [errorMsg + ": bound variable " + aId + " distinct from " + bId]
-    
+    | Partial(aTy,_), Partial(bTy,_) ->
+        match Ty.IsSubtype aTy bTy with
+        | Success ->
+            Success
+        | Failure(stack) ->
+            Failure(errorMsg :: stack)
 
   override this.ToString() =
         match this with
@@ -251,11 +258,14 @@ type Ty =
             name
         | ForallTy(varId, kind, body,_) ->
             "(Forall (" + varId + " : " + kind.ToString() + "). " + body.ToString() + ")"
+        | Partial(ty,_) ->
+            "[" + ty.ToString() + "]"
 
 type Expr =
   | Int of int * Range
   | Float of float * Range
   | Forall of tyVar : string * kind : ProperKind * body : Expr * Range
+  | ForallApp of forall : Expr * arg : Ty * Range
   | Abs of var : string * ty : Ty * scalar : Coeffect * body : Expr * Range
   | App of fn : Expr * arg : Expr * Range
   | Const of name : string * Range
@@ -274,11 +284,13 @@ type Expr =
   | Inl of lty : Ty * rTy : Ty * e : Expr * Range
   | Inr of lty : Ty * rTy : Ty * e : Expr * Range
   | Cap of q : Coeffect * e : Expr * Range
-  | Uncap of e : Expr * Range
+  | Uncap of q : Coeffect * varId : string * capsule : Expr * body : Expr * Range
   /// Constructor for ivars
   | ISet of e : Expr * Range
   /// Destructor for IVars
   | IGet of contentsBinder : string * ivar : Expr * elim : Expr * Range 
   | Let of var : string * bound : Expr * body : Expr * Range
+  | MLet of var : string * bound : Expr * body : Expr * Range 
+  | MRet of expr : Expr * Range
 
   type Prog = { typeAliases : Map<string, Ty> ; exprAliases : Map<string,Expr> ; body : Expr }

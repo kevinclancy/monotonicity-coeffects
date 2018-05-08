@@ -44,6 +44,8 @@ rule token = parse
 | "."	         { DOT }
 | "of"			 { OF }
 | "to"			 { TO }
+| "["            { LSQUAREBRACKET }
+| "]"            { RSQUAREBRACKET }
 | "|>"           { DICT }
 | "#"            { HASH }
 | "|"            { PIPE }

@@ -44,6 +44,26 @@ let rec typeCheck (ctxt : Context) (expr : Expr) =
             Success(ForallTy(tyVarId, kind, ty, noRange), coeffect)
         | Failure(stack) ->
             Failure((errorMsg + ": body not well-typed", rng) :: stack)
+    | ForallApp(forallExpr, tyArg, rng) ->
+        match typeCheck ctxt forallExpr with
+        | Success(ForallTy(id,kind,tyBody,_), R) ->
+            let kCheckResult =
+                match kind with
+                | Toset ->
+                    kCheckToset ctxt.tenv tyArg
+                | Semilattice ->
+                    kCheckSemilattice ctxt.tenv tyArg
+                | Proset ->
+                    kCheckProset ctxt.tenv tyArg
+            match kCheckResult with
+            | Some(stack) ->
+                Failure((errorMsg + ": " + tyArg.ToString() + " does not have expected kind " + kind.ToString(),rng) :: stack)
+            | None ->
+                Success(tyBody, R)
+        | Success(tyForall, _) ->
+            Failure [errorMsg + ": " + tyForall.ToString() + " is not a type abstraction", rng]
+        | Failure(stack) ->
+            Failure((errorMsg + ": body not well-typed", rng) :: stack)
     | Abs(var, varTy, q, body, rng) ->
         let venv' = Map.add var varTy venv
         match typeCheck { ctxt with venv = venv' } body with
@@ -96,6 +116,8 @@ let rec typeCheck (ctxt : Context) (expr : Expr) =
                     Success(ty,contr R1 R2)
                 | Failure(stack) ->
                     Failure((errorMsg,rng) :: stack)
+            | Failure(stack) ->
+                Failure((errorMsg,rng) :: stack)
         | Some(stack) ->
             Failure((errorMsg,rng) :: stack)
     | Extract(targetTy, key, value, acc, dict, body, rng) ->
@@ -179,5 +201,131 @@ let rec typeCheck (ctxt : Context) (expr : Expr) =
         | Success(Sum(lTy,rTy,_), R) ->
             let venvL = venv.Add(lName,lTy)
             let ctxtL = { ctxt with venv = venvL }
-            match typeCheck ctxt
+            match typeCheck ctxtL lElim with
+            | Success(lElimTy, S) ->
+                match Ty.IsSubtype lElimTy targetTy with
+                | SubtypeResult.Success ->
+                    let venvR = venv.Add(rName,rTy)
+                    let ctxtR = { ctxt with venv = venvR }
+                    match typeCheck ctxtR rElim with
+                    | Success(rElimTy, T) ->
+                        match Ty.IsSubtype rElimTy targetTy with
+                        | SubtypeResult.Success ->
+                            Success(targetTy, contr R (contr S T))
+                        | SubtypeResult.Failure(stack) ->
+                            Failure((errorMsg,rng) :: List.map (fun str -> (str,noRange)) stack)
+                    | Failure(stack) ->
+                        Failure( (errorMsg,rng) :: stack )
+                | SubtypeResult.Failure(stack) ->
+                    Failure((errorMsg,rng) :: List.map (fun str -> (str,noRange)) stack)
+            | Failure(stack) ->
+                Failure((errorMsg, rng) :: stack)
+        | Success(scrTy,rng) ->
+            Failure [errorMsg + ": case scrutinee should have sum type, but instead found" + scrTy.ToString(), rng]
+        | Failure(stack) ->
+            Failure((errorMsg,rng) :: stack)
+    | Inl(lty, rty, expr, rng) ->
+        match typeCheck ctxt expr with
+        | Success(exprTy,R) ->
+            match Ty.IsSubtype exprTy lty with
+            | SubtypeResult.Success ->
+                Success(Sum(lty,rty,noRange),R)        
+            | SubtypeResult.Failure(stack) ->
+                Failure((errorMsg,rng) :: List.map (fun str -> (str,noRange)) stack)
+        | Failure(stack) ->
+            Failure((errorMsg,rng) :: stack)
+    | Inr(lty, rty, expr, rng) ->
+        match typeCheck ctxt expr with
+        | Success(exprTy,R) ->
+            match Ty.IsSubtype exprTy rty with
+            | SubtypeResult.Success ->
+                Success(Sum(lty,rty,noRange),R)        
+            | SubtypeResult.Failure(stack) ->
+                Failure((errorMsg,rng) :: List.map (fun str -> (str,noRange)) stack)
+        | Failure(stack) ->
+            Failure((errorMsg,rng) :: stack)
+    | Cap(q, e, rng) ->
+        match typeCheck ctxt e with
+        | Success(eTy, R) ->
+            Success(Capsule(eTy,q,rng), comp q R)
+        | Failure(stack) ->
+            Failure((errorMsg,rng) :: stack)
+    | Uncap(q, varId, capsule, body, rng) ->
+        match typeCheck ctxt capsule with
+        | Success(Capsule(contentsTy,s,_), R) when s = q ->
+            let venv' = venv.Add(varId, contentsTy)
+            match typeCheck { ctxt with venv = venv' } body with
+            | Success(bodyTy, S) ->
+                match S.TryFind(varId) with
+                | Some(r) when Coeffect.LessThan r q -> 
+                    Success(bodyTy, contr R (S.Remove(varId)))
+                | Some(r) ->
+                    Failure [(errorMsg + ": " + varId + " has coeffect " + r.ToString() + " but coeffect more restrictive 
+                              than " + q.ToString() + " expected", rng)]
+                | None ->
+                    failwith "unreachable"
+            | Failure(stack) ->
+                Failure( (errorMsg,rng) :: stack )
+        | Success(Capsule(contentsTy, s,_),R) ->
+            Failure[errorMsg + ": expected a capsule " + q.ToString() + " expression in the binding position, but got an capsule " + s.ToString(), rng]
+        | Success(bindTy,_) ->
+            Failure [errorMsg + ": expected an expression of capsule type in the binding position, but got an expression of type " + bindTy.ToString(), rng]
+        | Failure(stack) ->
+            Failure( (errorMsg,rng) :: stack )
+    | ISet(expr, rng) ->
+        match typeCheck ctxt expr with
+        | Success(contentsTy,R) ->
+            match kCheckToset (ctxt.tenv) contentsTy with
+            | None ->
+                Success(IVar(contentsTy, noRange), comp CoeffectAny R)
+            | Some(stack) ->
+                Failure((errorMsg + ": computed type " + contentsTy.ToString() + " for " + expr.ToString(),rng) :: stack)
+        | Failure(stack) ->
+            Failure((errorMsg,rng) :: stack)
+    | IGet(varId, ivar, body, rng) ->
+        match typeCheck ctxt ivar with
+        | Success(IVar(tyContents,_), R) ->
+            let venv' = venv.Add(varId,tyContents)
+            match typeCheck { ctxt with venv = venv' } body with
+            | Success(tyBody,S) ->
+                Success(Partial(tyBody,noRange), contr R S)
+            | Failure(stack) ->
+                Failure( (errorMsg, rng) :: stack )
+        | Success(bindTy,_) ->
+            Failure [errorMsg + ": " + expr.ToString() + " expected to have ivar type, but type " + bindTy.ToString() + " was computed.", rng]
+        | Failure(stack) ->
+            Failure( (errorMsg,rng) :: stack )
+    | Let(varId, bindExpr, bodyExpr, rng) ->
+        match typeCheck ctxt bindExpr with
+        | Success(tyBind, R) ->
+            let venv' = venv.Add(varId,tyBind)
+            match typeCheck { ctxt with venv = venv' } bindExpr with
+            | Success(tyBody, S) ->
+                Success(tyBody, contr (comp S.[varId] R) (S.Remove(varId)))
+            | Failure(stack) ->
+                Failure((errorMsg,rng) :: stack)
+        | Failure(stack) ->
+            Failure((errorMsg,rng) :: stack)
+    | MLet(varId, partialComputationExpr, bodyExpr, rng) ->
+        match typeCheck ctxt partialComputationExpr with
+        | Success(Partial(tyBind,_),R) ->
+            let venv' = venv.Add(varId,tyBind)
+            match typeCheck { ctxt with venv = venv' } bodyExpr with
+            | Success(Partial(tyBody,_),S) ->
+                Success(Partial(tyBody,noRange), contr (comp S.[varId] R) (S.Remove(varId)))
+            | Success(tyBody,_) ->
+                Failure [errorMsg + ": monadic let expected a partial computation in body position, but instead got " + tyBody.ToString(),rng]
+            | Failure(stack) ->
+                Failure((errorMsg,rng) :: stack)
+        | Success(tyRes,_) ->
+            Failure [errorMsg + ": monadic let expected a partial computation in binding position, but instead got " + tyBind.ToString(),rng]
+        | Failure(stack) ->
+            Failure((errorMsg,rng) :: stack)
+    | MRet(expr,rng) ->
+        match typeCheck ctxt expr with
+        | Success(tyExpr,R) ->
+            Success(Partial(tyExpr,noRange), R)
+        | Failure(stack) ->
+            Failure((errorMsg,rng) :: stack)
 
+        

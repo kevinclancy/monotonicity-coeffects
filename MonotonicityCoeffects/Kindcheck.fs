@@ -70,7 +70,9 @@ let rec kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Option<List<string * Ra
         | None ->
             Some [("undeclared type " + name, rng)]
     | ForallTy(varId, kind, body, rng) ->
-        Some [(errorMsg + ": type abstractions do not denote totally ordered sets", rng)]
+        Some [(errorMsg + ": no type abstraction is totally ordered", rng)]
+    | Partial(ty,rng) ->
+        Some [(errorMsg + ": no type in the partiality monad is totally ordered",rng)]
 
 /// kCheckSemilattice tenv ty = res 
 /// tenv - the type environment to check under
@@ -127,7 +129,13 @@ let rec kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Option<List<strin
             Some([errorMsg + explanation, rng])    
     | ForallTy(_,_,_,rng) ->
         Some([(errorMsg + ": type abstractions do not denote semilattices", rng)])
-
+    | Partial(tyContents,rng) ->
+        match kCheckSemilattice tenv tyContents with
+        | None ->
+            None
+        | Some(stack) ->
+            Some((errorMsg + ": [ty] is only a semilattice if ty is a semilattice",rng) :: stack)
+    
 let rec kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Option<List<string*Range>> =
     let tyVarEnv, tyBaseEnv = tenv.tyVarEnv, tenv.tyBaseEnv
     let errorMsg = "Type " + ty.ToString() + " is not a proset"
@@ -203,6 +211,12 @@ let rec kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Option<List<string*Ran
             Some [errorMsg + " type " + name + " not declared", rng]
     | ForallTy(varId, kind, body, rng) ->
         Some([(errorMsg + ": type abstractions do not denote prosets",rng)])
+    | Partial(tyContents,rng) ->
+        match kCheckProset tenv tyContents with
+        | None ->
+            None
+        | Some(stack) ->
+            Some((errorMsg,rng) :: stack)
 
 let rec kSynth (tenv : TypeEnvironment) (ty : Ty) : KindSynthResult =
     let tyVarEnv, tyBaseEnv = tenv.tyVarEnv, tenv.tyBaseEnv
@@ -296,4 +310,11 @@ let rec kSynth (tenv : TypeEnvironment) (ty : Ty) : KindSynthResult =
             Success(k)
         | Failure(stack) ->
             Failure [errorMsg + ": body not well-formed", rng]
-            
+    | Partial(tyContents, rng) ->
+        match kSynth tenv tyContents with
+        | Success(KProper(krefs,_)) ->
+            Success(KProper(krefs.Remove(Toset),noRange))
+        | Success(k) ->
+            Failure [errorMsg + ": in [ ty ], ty must have a proper kind, but kind " + k.ToString() + " was computed.", rng] 
+        | Failure(stack) ->
+            Failure((errorMsg, rng) :: stack)

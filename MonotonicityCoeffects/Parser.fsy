@@ -15,6 +15,7 @@ open Ast
 %token AT DOT PLUS MINUS QUESTION ASTERISK LPAREN RPAREN IN LET END EOF FST SND COMMA OF CASE 
 %token INL INR TO CAP UNCAP PIPE TYPES SEMICOLON LBRACK RBRACK BANG
 %token HASH DICT TOSET PROSET SEMILATTICE FORALL BIGFORALL IMPLIES ARROW
+%token LSQUAREBRACKET RSQUAREBRACKET LARROW
 
 %right ARROW DICT PLUS ASTERISK IMPLIES
 
@@ -37,6 +38,7 @@ Kind : ProperKind { $1 }
      | ProperKindPrime IMPLIES Kind { KOperator($1,$3,parseState.ResultRange) }
 
 ExprList : ExprList Expr { App($1,$2, parseState.ResultRange) }
+		 | ExprList BANG Ty { ForallApp($1, $2, parseState.ResultRange) }
          | Expr { $1 }
 
 Expr: INT                        { Int($1, parseState.ResultRange) }
@@ -59,10 +61,12 @@ Expr: INT                        { Int($1, parseState.ResultRange) }
 	| INL Ty Ty Expr { Inl($2,$3,$4, parseState.ResultRange) }
 	| INR Ty Ty Expr { Inr($2,$3,$4, parseState.ResultRange) }
 	| CAP Scalar Expr { Cap($2, $3, parseState.ResultRange) }
-	| UNCAP Expr { Uncap($2, parseState.ResultRange) }
+	| LET CAP Scalar ID EQUAL Expr IN Expr { Uncap($3, $4, $6, $8, parseState.ResultRange) }
 	| ISET Expr { ISet($2, parseState.ResultRange) }
 	| LET PIPE ID PIPE EQUAL Expr IN Expr END { IGet($3, $6, $8, parseState.ResultRange) }
 	| LET CONS Ty ID ID ID EQUAL Expr IN Expr END { Extract($3,$4,$5,$6,$8,$10, parseState.ResultRange) }
+	| LET LSQUAREBRACKET ID RSQUAREBRACKET LARROW Expr IN Expr { MLet($3,$5,$6, parseState.ResultRange) }
+	| LSQUAREBRACKET Expr RSQUAREBRACKET { MRet($2, parseState.ResultRange) }
 
 Scalar: PLUS         { CoeffectMonotone }
       | MINUS        { CoeffectAntitone }
