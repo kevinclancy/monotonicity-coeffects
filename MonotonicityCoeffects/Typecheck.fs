@@ -3,6 +3,7 @@
 open Ast
 open Kindcheck
 open System
+open CheckComputation
 
 type ValueEnvironment = Map<string, Ty>
 type Context = { tenv : TypeEnvironment ; venv : ValueEnvironment }
@@ -59,20 +60,18 @@ let rec typeCheck (ctxt : Context) (expr : Expr) =
             | Some(stack) ->
                 Failure((errorMsg + ": " + tyArg.ToString() + " does not have expected kind " + kind.ToString(),rng) :: stack)
             | None ->
-                Success(tyBody, R)
+                Success(Ty.subst tyBody id tyArg, R)
         | Success(tyForall, _) ->
             Failure [errorMsg + ": " + tyForall.ToString() + " is not a type abstraction", rng]
         | Failure(stack) ->
             Failure((errorMsg + ": body not well-typed", rng) :: stack)
-    | Abs(var, varTy, q, body, rng) ->
+    | Abs(var, varTy, body, rng) ->
         let venv' = Map.add var varTy venv
         match typeCheck { ctxt with venv = venv' } body with
         | Success(tyBody, coeffect) ->
             match coeffect.TryFind var with
-            | Some(q') when Coeffect.LessThan q q' ->
+            | Some(q) ->
                 Success(FunTy(varTy, q, tyBody, noRange), coeffect.Remove var)
-            | Some(q') ->
-                Failure [errorMsg + "required scalar " + q.ToString() + " not less than " + q'.ToString(), rng]
             | None ->
                 failwith "unreachable"
         | Failure(stack) ->
@@ -134,9 +133,9 @@ let rec typeCheck (ctxt : Context) (expr : Expr) =
                 | Success(bodyTy, bodyR) ->
                     match Ty.IsSubtype bodyTy targetTy with
                     | SubtypeResult.Success ->
-                        Success(targetTy, contr bodyR dictR)
+                        Success(targetTy, contr (bodyR.Remove(key).Remove(value).Remove(acc)) dictR)
                     | SubtypeResult.Failure(stack) ->
-                        Failure((errorMsg + ": body type " + bodyTy.ToString() + " is not a subtype of target type " + targetTy.ToString(),rng) :: stack)
+                        Failure((errorMsg + ": body type " + bodyTy.ToString() + " is not a subtype of target type " + targetTy.ToString(),rng) :: List.map (fun k -> k,noRange) stack)
                 | Failure(stack) ->
                     Failure(stack)
             | Success(wrongTy, _) ->
@@ -163,7 +162,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) =
                     | Failure(stack) ->
                         Failure((errorMsg,rng) :: stack)
                 | SubtypeResult.Failure(stack) ->
-                   Failure((errorMsg + ": value " + e2.ToString() + " is not a subtype of dictionary codomain " + codTy.ToString(), rng) :: stack)
+                   Failure((errorMsg + ": value " + e2.ToString() + " is not a subtype of dictionary codomain " + codTy.ToString(), rng) :: List.map (fun k -> k,noRange) stack)
             | Failure(stack) ->
                 Failure((errorMsg,rng) :: stack)
         | Success(wrongTy, _) ->
@@ -220,7 +219,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) =
                     Failure((errorMsg,rng) :: List.map (fun str -> (str,noRange)) stack)
             | Failure(stack) ->
                 Failure((errorMsg, rng) :: stack)
-        | Success(scrTy,rng) ->
+        | Success(scrTy,_) ->
             Failure [errorMsg + ": case scrutinee should have sum type, but instead found" + scrTy.ToString(), rng]
         | Failure(stack) ->
             Failure((errorMsg,rng) :: stack)
@@ -318,7 +317,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) =
             | Failure(stack) ->
                 Failure((errorMsg,rng) :: stack)
         | Success(tyRes,_) ->
-            Failure [errorMsg + ": monadic let expected a partial computation in binding position, but instead got " + tyBind.ToString(),rng]
+            Failure [errorMsg + ": monadic let expected a partial computation in binding position, but instead got " + tyRes.ToString(),rng]
         | Failure(stack) ->
             Failure((errorMsg,rng) :: stack)
     | MRet(expr,rng) ->
@@ -327,5 +326,31 @@ let rec typeCheck (ctxt : Context) (expr : Expr) =
             Success(Partial(tyExpr,noRange), R)
         | Failure(stack) ->
             Failure((errorMsg,rng) :: stack)
+ 
+// type TypeEnvironment = { tyVarEnv : Map<string, Kind> ; tyBaseEnv : Map<string, Kind> }
+// type ValueEnvironment = Map<string, Ty>
+// type Context = { tenv : TypeEnvironment ; venv : ValueEnvironment }
 
-        
+let progCheck (ctxt : Context) (p : Prog) = 
+    let foldAlias (acc : Check<TypeEnvironment>) (n : string) (ty : Ty) =
+        match acc with
+        | Error(stack) ->
+            Error(stack)
+        | Result(tenv) ->
+            match kSynth tenv ty with
+            | KindSynthResult.Success(k) ->
+                Result { tenv with tyVarEnv = tenv.tyVarEnv.Add(n,k) }
+            | KindSynthResult.Failure(stack) ->
+                Error(stack)
+
+    let tenvCheck = check { return ctxt.tenv }
+    let tenvComp = Map.fold foldAlias tenvCheck p.typeAliases
+    match tenvComp with
+    | Error(stack) ->
+        Error(stack)
+    | Result(tenv) ->
+        match typeCheck { ctxt with tenv = tenv } p.body with
+        | Success(ty,R) ->
+            Result(ty,R)
+        | Failure(stack) ->
+            Error(stack)

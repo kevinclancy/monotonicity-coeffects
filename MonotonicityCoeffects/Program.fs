@@ -11,16 +11,29 @@ open Typecheck
 open Ast
 open System
 open Kindcheck
+open CheckComputation
 
-let baseTyMap = 
+let baseTyMap =
     Map<string, Kind>(
         [("Nat", KProper(Set [Semilattice; Toset; Proset], noRange)); 
          ("MinNat", KProper(Set [Semilattice; Toset; Proset], noRange)); 
          ("Unit", KProper(Set [Semilattice; Toset; Proset], noRange));
          ("Bool", KProper(Set [Semilattice; Toset; Proset], noRange))])
 
-let tyVarEnv = Map.empty
+let tyVarEnv = 
+    Map<string, Kind>(
+        [("Nat", KProper(Set [Semilattice; Toset; Proset], noRange)); 
+         ("MinNat", KProper(Set [Semilattice; Toset; Proset], noRange)); 
+         ("Unit", KProper(Set [Semilattice; Toset; Proset], noRange));
+         ("Bool", KProper(Set [Semilattice; Toset; Proset], noRange))])
+
+let baseVEnv =
+    Map<string, Ty>(
+        [("unit", TyAlias("Unit", noRange))]
+    )
+
 let tenv = { tyVarEnv = tyVarEnv ; tyBaseEnv = baseTyMap }
+let ctxt = { tenv = tenv ; venv = baseVEnv}
 
 let rec printStack (stack : List<string*Range>) =
     match stack with
@@ -38,19 +51,17 @@ let main argv =
         let lexbuffer : LexBuffer<char> = LexBuffer.FromString(reader.ReadToEnd())
         let ty = 
           try 
-            Parser.Ty(Lexer.token) lexbuffer
+            Parser.start(Lexer.token) lexbuffer
           with
           | e ->
             printfn "Parse error. Line: %d, Column: %d" (lexbuffer.StartPos.Line + 1) lexbuffer.StartPos.Column
             exit 1
-
-        match Kindcheck.kCheckSemilattice tenv ty with
-        | Some(stack) ->
+        
+        match progCheck ctxt ty with
+        | Error(stack) ->
             printStack stack
-        | None ->
-            printf "success!"
-
-        printfn "Hello World from F#!"
+        | Result(ty,R) ->
+            printf "Successfully type-and-coeffect-checked program as: %s\n%s\n" (ty.ToString()) (R.ToString())
         0 // return an integer exit code
     with 
     | :? IndexOutOfRangeException ->

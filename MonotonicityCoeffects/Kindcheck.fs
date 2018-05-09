@@ -73,13 +73,33 @@ let rec kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Option<List<string * Ra
         Some [(errorMsg + ": no type abstraction is totally ordered", rng)]
     | Partial(ty,rng) ->
         Some [(errorMsg + ": no type in the partiality monad is totally ordered",rng)]
+    | ForallTyApp(tyForall, tyArg, rng) ->
+        match kSynth tenv tyForall with
+        | Success(KOperator(dom,cod,_)) ->
+            match kSynth tenv tyArg with
+            | Success(KProper(kPropArg,_)) when kPropArg.Contains(dom) ->
+                match cod with
+                | KProper(ks,_) when ks.Contains(Toset) ->
+                    None
+                | _ ->
+                    Some [errorMsg + ": forall body kind " + cod.ToString() + " is not toset",noRange]
+            | Success(KProper(kPropArg,_)) ->
+                Some [errorMsg + ": type operator argument of kind " + dom.ToString() + " expected, but got " + kPropArg.ToString(), rng]
+            | Success(KOperator(_,_,rngArg)) ->
+                Some [errorMsg + ": argument to type application should have proper kind, but " + tyArg.ToString() + " is a type operator",rngArg]
+            | Failure(stack) ->
+                Some((errorMsg,rng) :: stack)
+        | Success(KProper(k,rngOp)) ->
+            Some [errorMsg + ": " + tyForall.ToString() + " is not a type operator",rngOp]
+        | Failure(stack) ->
+            Some((errorMsg,rng) :: stack)
 
 /// kCheckSemilattice tenv ty = res 
 /// tenv - the type environment to check under
 /// ty - the type to check
 /// ty0 - If ty is a semilattice type, None
 ///       Otherwise, Some explanation, where explanation is an error stack
-let rec kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Option<List<string*Range>> =
+and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Option<List<string*Range>> =
     let tyVarEnv, tyBaseEnv = tenv.tyVarEnv, tenv.tyBaseEnv
     let errorMsg = "Type " + ty.ToString() + " is not a semilattice"
     match ty with
@@ -135,8 +155,28 @@ let rec kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Option<List<strin
             None
         | Some(stack) ->
             Some((errorMsg + ": [ty] is only a semilattice if ty is a semilattice",rng) :: stack)
-    
-let rec kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Option<List<string*Range>> =
+    | ForallTyApp(tyForall, tyArg, rng) ->
+        match kSynth tenv tyForall with
+        | Success(KOperator(dom,cod,_)) ->
+            match kSynth tenv tyArg with
+            | Success(KProper(kPropArg,_)) when kPropArg.Contains(dom) ->
+                match cod with
+                | KProper(ks,_) when ks.Contains(Semilattice) ->
+                    None
+                | _ ->
+                    Some [errorMsg + ": forall body kind " + cod.ToString() + " is not semilattice",noRange]
+            | Success(KProper(kPropArg,_)) ->
+                Some [errorMsg + ": type operator argument of kind " + dom.ToString() + " expected, but got " + kPropArg.ToString(), rng]
+            | Success(KOperator(_,_,rngArg)) ->
+                Some [errorMsg + ": argument to type application should have proper kind, but " + tyArg.ToString() + " is a type operator",rngArg]
+            | Failure(stack) ->
+                Some((errorMsg,rng) :: stack)
+        | Success(KProper(k,rngOp)) ->
+            Some [errorMsg + ": " + tyForall.ToString() + " is not a type operator",rngOp]
+        | Failure(stack) ->
+            Some((errorMsg,rng) :: stack)       
+            
+and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Option<List<string*Range>> =
     let tyVarEnv, tyBaseEnv = tenv.tyVarEnv, tenv.tyBaseEnv
     let errorMsg = "Type " + ty.ToString() + " is not a proset"
     match ty with
@@ -217,8 +257,28 @@ let rec kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Option<List<string*Ran
             None
         | Some(stack) ->
             Some((errorMsg,rng) :: stack)
+    | ForallTyApp(tyForall, tyArg, rng) ->
+        match kSynth tenv tyForall with
+        | Success(KOperator(dom,cod,_)) ->
+            match kSynth tenv tyArg with
+            | Success(KProper(kPropArg,_)) when kPropArg.Contains(dom) ->
+                match cod with
+                | KProper(ks,_) when ks.Contains(Proset) ->
+                    None
+                | _ ->
+                    Some [errorMsg + ": forall body kind " + cod.ToString() + " is not proset",noRange]
+            | Success(KProper(kPropArg,_)) ->
+                Some [errorMsg + ": type operator argument of kind " + dom.ToString() + " expected, but got " + kPropArg.ToString(), rng]
+            | Success(KOperator(_,_,rngArg)) ->
+                Some [errorMsg + ": argument to type application should have proper kind, but " + tyArg.ToString() + " is a type operator",rngArg]
+            | Failure(stack) ->
+                Some((errorMsg,rng) :: stack)
+        | Success(KProper(k,rngOp)) ->
+            Some [errorMsg + ": " + tyForall.ToString() + " is not a type operator",rngOp]
+        | Failure(stack) ->
+            Some((errorMsg,rng) :: stack)       
 
-let rec kSynth (tenv : TypeEnvironment) (ty : Ty) : KindSynthResult =
+and kSynth (tenv : TypeEnvironment) (ty : Ty) : KindSynthResult =
     let tyVarEnv, tyBaseEnv = tenv.tyVarEnv, tenv.tyBaseEnv
     let errorMsg = "Type " + ty.ToString() + " is not well-formed"
     match ty with
@@ -305,11 +365,11 @@ let rec kSynth (tenv : TypeEnvironment) (ty : Ty) : KindSynthResult =
         | None ->
             Failure [errorMsg + " type " + name + " not declared", rng]
     | ForallTy(varId, kind, body, rng) ->
-        match kSynth { tenv with tyVarEnv = tyVarEnv.Add(varId, kind) } body with
+        match kSynth { tenv with tyVarEnv = tyVarEnv.Add(varId, KProper(Set [kind],noRange)) } body with
         | Success(k) ->
             Success(k)
         | Failure(stack) ->
-            Failure [errorMsg + ": body not well-formed", rng]
+            Failure( (errorMsg + ": body not well-formed", rng) :: stack)
     | Partial(tyContents, rng) ->
         match kSynth tenv tyContents with
         | Success(KProper(krefs,_)) ->
@@ -318,3 +378,19 @@ let rec kSynth (tenv : TypeEnvironment) (ty : Ty) : KindSynthResult =
             Failure [errorMsg + ": in [ ty ], ty must have a proper kind, but kind " + k.ToString() + " was computed.", rng] 
         | Failure(stack) ->
             Failure((errorMsg, rng) :: stack)
+    | ForallTyApp(forallTy, argTy, rng) ->
+        match kSynth tenv forallTy with
+        | Success(KOperator(dom,cod,rngOp)) ->
+            match kSynth tenv argTy with
+            | Success(KProper(kPropArg,_)) when kPropArg.Contains(dom) ->
+                Success(cod)
+            | Success(KProper(kPropArg,_)) ->
+                Failure [errorMsg + ": type operator argument of kind " + dom.ToString() + " expected, but got " + kPropArg.ToString(), rng]
+            | Success(KOperator(_,_,rngArg)) ->
+                Failure [errorMsg + ": argument to type application should have proper kind, but " + argTy.ToString() + " is a type operator",rngArg]
+            | Failure(stack) ->
+                Failure((errorMsg,rng) :: stack)
+        | Success(KProper(k,rngOp)) ->
+            Failure [errorMsg + ": " + forallTy.ToString() + " is not a type operator",rngOp]
+        | Failure(stack) ->
+            Failure((errorMsg,rng) :: stack)

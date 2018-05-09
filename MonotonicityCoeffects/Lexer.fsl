@@ -32,7 +32,6 @@ rule token = parse
 | ":"            { COLON }
 | ";"            { SEMICOLON }
 | "types"        { TYPES }
-| "forall"       { FORALL }
 | "TOSET"        { TOSET }
 | "PROSET"       { PROSET }
 | "SEMILATTICE"  { SEMILATTICE }
@@ -74,6 +73,7 @@ rule token = parse
 | "("            { LPAREN}
 | ")"            { RPAREN }
 | "in"           { IN }
+| "and"          { AND }
 | "let"          { LET }
 | "end"			 { END }
 | 'K''-'['a'-'z''A'-'Z']+ { CONST(lexeme lexbuf) }
