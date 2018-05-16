@@ -2,6 +2,7 @@
 
 open Microsoft.FSharp.Text.Lexing
 open Ast
+open CheckComputation
 
 /// tyVarEnv maps each identifier to a kind it is bound to
 /// tyBaseEnv maps each base type name (they are semilattices) to its kind

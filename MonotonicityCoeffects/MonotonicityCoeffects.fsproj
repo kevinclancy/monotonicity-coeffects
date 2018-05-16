@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <Compile Include="CheckComputation.fs" />
+    <Compile Include="PCF.fs" />
     <Compile Include="Ast.fs" />
     <Compile Include="Kindcheck.fs" />
     <Compile Include="Typecheck.fs" />

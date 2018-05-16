@@ -1,28 +1,13 @@
-﻿
-types
+﻿types
   set = (Forall x : TOSET . x |> Bool); 
 in
 
 let monoIf = 
-  (forall src : SEMILATTICE .  
-  (forall dest : SEMILATTICE . 
-  (fun cond : src . 
-  (fun res : dest . 
-  
-  let cons dest k v acc = cons unit cond (bot (Unit |> src)) in 
-    res
+  fun (src : SEMILATTICE) (dest : SEMILATTICE) (cond : src) (res : dest)
+      let cons dest k v acc = cons unit cond (bot (Unit |> src)) in 
+		res
+      end
   end
-  ))))
-and blang = 
-  (forall src : SEMILATTICE .  
-  (forall dest : SEMILATTICE . 
-  (fun cond : src . 
-  (fun res : dest . 
-  
-  let cons dest k v acc = cons unit cond (bot (Unit |> src)) in 
-    res
-  end
-  ))))
 in
-  blang
+  monoIf
 end
