@@ -103,11 +103,6 @@ type Kind =
   /// semilat - Some(semSemilat) if classified type provides a semilattice interpretation, None otherwise
   | KProper of poset : SemPoset * toset : Option<SemToset> * semilat : Option<SemSemilat> * Range
   | KOperator of dom : ProperKind * cod : Kind * Range
-  // Forall terms have proper kind, but the semantics cannot be resolved until application
-  // Supply computeKind with kind of type argument, and it returns kind of application
-  | KForallPoset of computeKind : (SemPoset -> Kind) * Range
-  | KForallToset of computeKind : (SemToset -> Kind) * Range
-  | KForallSemilat of computeKind : (SemSemilat -> Kind) * Range
 
 /// If k is KProper, return true iff it holds a component representing the proper kind p
 let hasKind (k : Kind) (p : ProperKind) =
@@ -137,7 +132,9 @@ type SubtypeResult =
     | Failure of List<string>
     
 type Ty =
-  | BaseTy of name : string * pos : (Position * Position)
+  // In order of precedence,
+  // could be a type variable, a type identifier, or a base type
+  | TyId of name : string * pos : (Position * Position)
   /// A function type
   | FunTy of dom : Ty * q : Coeffect * cod : Ty * pos : (Position * Position)
   /// A finite semilattice dictionary
@@ -150,52 +147,44 @@ type Ty =
   | Sum of t1 : Ty * t2 : Ty * pos : (Position * Position)
   /// An ivar
   | IVar of ty : Ty * pos : (Position * Position)
-  /// A type from the type environmnet
-  | TyAlias of name : string * pos : (Position * Position)
   /// Type operator
   | TyOp of varId : string * kind : ProperKind * body : Ty * pos : (Position * Position)
   // Monotone partiality monad
   | Partial of ty : Ty * pos : Range
   // Type abstraction application
-  | TyOpApp of op : Ty * arg : Ty * Range
+  | TyApp of op : Ty * arg : Ty * Range
 
-  static member subst (a : Ty) (x : string) (s : Ty) : Ty =
-    match a with
-    | BaseTy(name,rng) ->
-        BaseTy(name,rng)
-    | FunTy(dom,q,cod,rng) ->
-        FunTy(Ty.subst dom x s, q, Ty.subst cod x s, rng)
+  static member subst (a : Ty) (x : string) (b : Ty) : Ty =
+    match b with
+    | TyId(id,rng) ->
+        if id = x then
+            a
+        else 
+            TyId(id,rng)
+    | FunTy(dom,q,cod,rng) -> 
+        FunTy(Ty.subst a x dom, q, Ty.subst a x cod, rng) 
     | Dictionary(dom,cod,rng) ->
-        Dictionary(Ty.subst dom x s, Ty.subst cod x s, rng)
-    | Capsule(tyContents,q,rng) ->
-        Capsule(Ty.subst tyContents x s, q, rng)
-    | Prod(tyL,tyR,rng) ->
-        Prod(Ty.subst tyL x s, Ty.subst tyR x s, rng)
+        Dictionary(Ty.subst a x dom, Ty.subst a x cod, rng)
+    /// A scalar capsule
+    | Capsule(ty,q,rng) ->
+        Capsule(Ty.subst a x ty, q, rng)
+    /// A componentwise ordered product
+    | Prod(tyL, tyR, rng) ->
+        Prod(Ty.subst a x tyL, Ty.subst a x tyR, rng)
     | Sum(tyL, tyR, rng) ->
-        Sum(Ty.subst tyL x s, Ty.subst tyR x s, rng)
-    | IVar(tyContents, rng) ->
-        IVar(Ty.subst tyContents x s, rng)
-    | TyAlias(name,rng) ->
-        if name = x then
-            s
+        Sum(Ty.subst a x tyL, Ty.subst a x tyR, rng)
+    /// An ivar
+    | IVar(ty, rng) ->
+        IVar(Ty.subst a x ty, rng)
+    | TyOp(id, pk, body, rng) ->
+        if x = id then
+            TyOp(id,pk,body,rng)
         else
-            TyAlias(name,rng)
-    | ForallTy(varId,kind,body,rng) ->
-        if varId = x then
-            ForallTy(varId, kind, body, rng)
-        else
-            ForallTy(varId,kind,Ty.subst body x s, rng)
-    | Partial(tyContents, rng) ->
-        Partial(Ty.subst tyContents x s, rng)
-    | ForallTyApp(forallTy, argTy, rng) ->
-        ForallTyApp(Ty.subst forallTy x s, Ty.subst argTy x s, rng)
-
-  static member normalize (a : Ty) : Ty =
-    match a with
-    | ForallTyApp(ForallTy(varId,kind,body,_), argTy, _) ->
-        Ty.normalize (Ty.subst body varId argTy)
-    | _ ->
-        a
+            TyOp(id,pk,Ty.subst a x body, rng)
+    | Partial(ty, rng) ->
+        Partial(Ty.subst a x ty, rng)
+    | TyApp(op, arg, rng) ->
+        TyApp(Ty.subst a x op, Ty.subst a x arg, rng)
 
   static member IsEquiv (a : Ty) (b : Ty) : SubtypeResult =
     let errorMsg = "Type " + a.ToString() + " is not equivalent to " + b.ToString()
@@ -212,7 +201,7 @@ type Ty =
   static member IsSubtype (a : Ty) (b : Ty) : SubtypeResult =
     let errorMsg = a.ToString() + " is not a subtype of " + b.ToString()
     match (a,b) with
-    | BaseTy(aName,_), BaseTy(bName,_) ->
+    | TyId(aName,_), TyId(bName,_) ->
         match aName = bName with
         | true -> 
             Success
@@ -279,15 +268,8 @@ type Ty =
             Success
         | Failure(stack) ->
             Failure(errorMsg :: stack)
-    /// A type from the type environmnet
-    | TyAlias(aName,_), TyAlias(bName,_) ->
-        match aName = bName with
-        | true ->
-            Success
-        | false ->
-            Failure [errorMsg + ": type alias " + aName + " is distinct from " + bName]
     /// Type abstraction
-    | ForallTy(aId, aKind, aBody, _), ForallTy(bId, bKind, bBody, _) ->
+    | TyOp(aId, aKind, aBody, _), TyOp(bId, bKind, bBody, _) ->
         match aId = bId with
         | true ->
             match aKind = bKind with
@@ -312,8 +294,8 @@ type Ty =
 
   override this.ToString() =
         match this with
-        | BaseTy(name,_) ->
-            "#" + name
+        | TyId(name,_) ->
+            name
         | FunTy(dom,q,cod,_) ->
             "(" + dom.ToString() + " " + q.ToString() + "-> " + cod.ToString() + ")"
         | Dictionary(dom,cod,_) ->
@@ -326,13 +308,11 @@ type Ty =
             "(" + tyL.ToString() + " + " + tyR.ToString() + ")"
         | IVar(tyContents,_) ->
             "!" + tyContents.ToString() + "!"
-        | TyAlias(name,_) ->
-            name
-        | ForallTy(varId, kind, body,_) ->
+        | TyOp(varId, kind, body,_) ->
             "(Forall (" + varId + " : " + kind.ToString() + "). " + body.ToString() + ")"
         | Partial(ty,_) ->
             "[" + ty.ToString() + "]"
-        | ForallTyApp(forallTy, argTy, rng) ->
+        | TyApp(forallTy, argTy, rng) ->
             "(" + forallTy.ToString() + " " + argTy.ToString() + ")" 
 
 type Expr =

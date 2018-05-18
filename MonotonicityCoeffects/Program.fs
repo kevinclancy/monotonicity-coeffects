@@ -12,27 +12,117 @@ open Ast
 open System
 open Kindcheck
 open CheckComputation
+open PCF
+
+module P = PCF
+
+let joinNat (t : P.Term) =
+    match t with
+    | P.PrimNatVal(m) ->
+        let joinNat' (s : P.Term) =
+            match s with
+            | P.PrimNatVal(n) ->
+                P.PrimNatVal(Math.Max(m,n))
+            | _ ->
+                failwith "This program has 'gone wrong'. Oops."
+
+        P.Abs("n", P.Prim("Nat"), P.App(PrimFun("joinNat'", joinNat'), P.Var("n")))
+    | _ ->
+        failwith "this program has 'gone wrong'. oops."    
+
+let lessNat (t : P.Term) =
+    match t with
+    | P.PrimNatVal(m) ->
+        let joinNat' (s : P.Term) =
+            match s with
+            | P.PrimNatVal(n) ->
+                P.PrimNatVal(Math.Max(m,n))
+            | _ ->
+                failwith "This program has 'gone wrong'. Oops."
+
+        P.Abs("n", P.Prim("Nat"), P.App(PrimFun("lessNat'", joinNat'), P.Var("n")))
+    | _ ->
+        failwith "this program has 'gone wrong'. oops."    
+
+let joinBool (t : P.Term)  =
+    match t with
+    | P.PrimBoolVal(a) ->
+        let lessNat' (s : P.Term) =
+            match s with
+            | P.PrimBoolVal(b) ->
+                P.PrimBoolVal(a || b)
+            | _ ->
+                failwith "This program has 'gone wrong'. Oops."
+
+        P.Abs("b", P.Prim("Bool"), P.App(P.PrimFun("joinBool'", lessNat'), P.Var("b")))
+    | _ ->
+        failwith "this program has 'gone wrong'. oops."
+
+let lessBool (t : P.Term)  =
+    match t with
+    | P.PrimBoolVal(a) ->
+        let lessBool' (s : P.Term) =
+            match s with
+            | P.PrimBoolVal(b) ->
+                P.PrimBoolVal(a = false && b = true)
+            | _ ->
+                failwith "This program has 'gone wrong'. Oops."
+        P.Abs("b", P.Prim("Bool"), P.App(P.PrimFun("lessBool'", lessBool'), P.Var("b")))
+    | _ ->
+        failwith "this program has 'gone wrong'. oops."
+
+let joinUnit (t : P.Term)  =
+    match t with
+    | P.PrimUnitVal ->
+        let joinUnit' (s : P.Term) =
+            match s with
+            | P.PrimUnitVal ->
+                P.PrimUnitVal
+            | _ ->
+                failwith "This program has 'gone wrong'. Oops."
+        P.Abs("b", P.Prim("Unit"), P.App(P.PrimFun("jUnit'", joinUnit'), P.Var("b")))
+    | _ ->
+        failwith "this program has 'gone wrong'. oops."
+
+let lessUnit (t : P.Term)  =
+    match t with
+    | P.PrimUnitVal ->
+        let lessUnit' (s : P.Term) =
+            match s with
+            | P.PrimUnitVal ->
+                P.PrimBoolVal(false)
+            | _ ->
+                failwith "This program has 'gone wrong'. Oops."
+        P.Abs("b", P.Prim("Unit"), P.App(P.PrimFun("<'", lessUnit'), P.Var("b")))
+    | _ ->
+        failwith "this program has 'gone wrong'. oops."
 
 let baseTyMap =
     Map<string, Kind>(
-        [("Nat", KProper(Set [Semilattice; Toset; Proset], noRange)); 
-         ("MinNat", KProper(Set [Semilattice; Toset; Proset], noRange)); 
-         ("Unit", KProper(Set [Semilattice; Toset; Proset], noRange));
-         ("Bool", KProper(Set [Semilattice; Toset; Proset], noRange))])
+        [("Nat", KProper(
+                    P.Prim("Nat"), 
+                    Some(PrimFun("lessNat", lessNat)), 
+                    Some { bot = PrimNatVal(0) ; join = PrimFun("joinNat", joinNat) }, 
+                    noRange));
 
-let tyVarEnv = 
-    Map<string, Kind>(
-        [("Nat", KProper(Set [Semilattice; Toset; Proset], noRange)); 
-         ("MinNat", KProper(Set [Semilattice; Toset; Proset], noRange)); 
-         ("Unit", KProper(Set [Semilattice; Toset; Proset], noRange));
-         ("Bool", KProper(Set [Semilattice; Toset; Proset], noRange))])
+         ("Unit", KProper(
+                    P.Prim("Unit"),
+                    Some(PrimFun("lessUnit", lessUnit)),
+                    Some{bot = PrimUnitVal ; join = PrimFun("joinUnit", joinUnit)},
+                    noRange));
+
+         ("Bool", KProper(
+                    P.Prim("Bool"),
+                    Some(PrimFun("lessBool", lessBool)),
+                    Some{bot = PrimUnitVal ; join = PrimFun("joinBool", joinBool)},
+                    noRange))])
 
 let baseVEnv =
-    Map<string, Ty>(
-        [("unit", TyAlias("Unit", noRange))]
+    Map<string, Ast.Ty>(
+        [("unit", TyId("Unit", noRange))]
     )
 
-let tenv = { tyVarEnv = tyVarEnv ; tyBaseEnv = baseTyMap }
+let tenv = { tyVarEnv = Map.empty ; tyBaseEnv = baseTyMap; tyAliasEnv = Map.empty }
 let ctxt = { tenv = tenv ; venv = baseVEnv}
 
 let rec printStack (stack : List<string*Range>) =
