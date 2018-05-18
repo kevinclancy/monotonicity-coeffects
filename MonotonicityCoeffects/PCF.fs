@@ -5,18 +5,23 @@ open System.Runtime.InteropServices.ComTypes
 open System.Reflection.Metadata
 open System
 
-type Ty = 
+type Ty =
+    | Unit
     | BB // discrete boolean
     | List of elemTy : Ty 
-    | Pair of lTy : Ty * rTy : Ty
+    | Prod of lTy : Ty * rTy : Ty
+    | Sum of lTy : Ty * rTy : Ty
     | Fun of dom : Ty * cod : Ty
     | Prim of name : string // semilattice primitives: unit, bool, nat
+    | TyVar of name : string
 
 type Term =
     | Var of name : string
     | Pair of l : Term * r : Term
     | Proj1 of Term
     | Proj2 of Term
+    | In1 of Term
+    | In2 of Term
     | App of fn : Term * arg : Term
     | Abs of id : string * dom : Ty * body : Term
     | PrimFun of name : string * impl : (Term -> Term)
@@ -29,6 +34,8 @@ type Term =
     | BBFalse
     | BoolCase of scrutinee : Term * trueCase : Term * falseCase : Term
     | ListCase of scrutinee : Term * nilCase : Term * consCase : Term
+    | SumCase of scrutinee : Term * leftCase : Term * rightCase : Term
+    | LetRec of funName : string * parName : string * domTy : Ty  * codTy : Ty * body : Term
 
 let lessThan (t : Term)  =
     match t with
@@ -90,6 +97,13 @@ let rec subst (s : Term) (x : string) (t : Term) =
         BoolCase(subst s x scrut, subst s x t, subst s x f)
     | ListCase(scrut, nil, cons) ->
         ListCase(subst s x scrut, subst s x nil, subst s x cons)
+    | SumCase(scrut, lCase, rCase) ->
+        SumCase(subst s x scrut, subst s x lCase, subst s x rCase)
+    | LetRec(funName, parName, domTy, codTy, body) ->
+        if parName = x then
+            LetRec(funName, parName, domTy, codTy, body)
+        else
+            LetRec(funName, parName, domTy, codTy, subst s x body)
 
 let rec step (t : Term) : Option<Term> =
     match t with
@@ -125,6 +139,18 @@ let rec step (t : Term) : Option<Term> =
                 Some(e2)
             | _ ->
                 None
+    | In1(e) ->
+        match step e with
+        | Some(e') ->
+            Some(In1(e'))
+        | None ->
+            None
+    | In2(e) ->
+        match step e with
+        | Some(e') ->
+            Some(In1(e'))
+        | None ->
+            None
     | App(fn, arg) ->
         match step fn with
         | Some(fn') ->
@@ -137,6 +163,14 @@ let rec step (t : Term) : Option<Term> =
                 match fn with
                 | Abs(id,dom,body) ->
                     Some(subst arg id body)
+                | LetRec(funName, parName, domTy, codTy, body) ->
+                    match arg with
+                    | Cons(_,_)
+                    | EmptyList ->
+                        let f = LetRec(funName,parName,domTy,codTy,body)
+                        Some(subst f funName (subst arg parName body))
+                    | _ ->
+                        None
                 | _ ->
                     None
     | PrimFun(_, _)
@@ -179,5 +213,17 @@ let rec step (t : Term) : Option<Term> =
                 Some(nilCase)
             | Cons(head, tail) ->
                 Some(App(App(consCase, head), tail)) 
+            | _ ->
+                failwith "this program 'went wrong'. oops."
+    | SumCase(scrut, lCase, rCase) ->
+        match step scrut with
+        | Some(scrut') ->
+            Some(ListCase(scrut', lCase, rCase))
+        | None ->
+            match scrut with
+            | In1(e) ->
+                Some(App(lCase,e))
+            | In2(e) ->
+                Some(App(rCase,e)) 
             | _ ->
                 failwith "this program 'went wrong'. oops."

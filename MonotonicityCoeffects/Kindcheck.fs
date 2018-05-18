@@ -1,12 +1,97 @@
 ﻿module Kindcheck
 
+open PCF
 open Microsoft.FSharp.Text.Lexing
 open Ast
 open CheckComputation
 
+module P = PCF
+
+let V = P.Var
+let Ap = P.App
+let Ab = P.Abs
+let ListCase = P.ListCase
+let BoolCase = P.BoolCase
+let P1 = P.Proj1
+let P2 = P.Proj2
+let I1 = P.In1
+let I2 = P.In2
+
 /// tyVarEnv maps each identifier to a kind it is bound to
 /// tyBaseEnv maps each base type name (they are semilattices) to its kind
 type TypeEnvironment = { tyVarEnv : Map<string, Kind> ; tyBaseEnv : Map<string, Kind> }
+
+type Ty with
+  static member reduce (a : Ty) : Option<Ty> =
+    match a with
+    | BaseTy(name,rng) ->
+        None
+    | FunTy(dom,q,cod,rng) ->
+        match Ty.reduce dom with
+        | Some(dom') ->
+            Some(FunTy(dom',q,cod,rng))
+        | None ->
+            match Ty.reduce cod with
+            | Some(cod') ->
+                Some(FunTy(dom,q,cod',rng))
+            | None ->
+                None
+    | Dictionary(dom,cod,rng) ->
+        match Ty.reduce dom with
+        | Some(dom') ->
+            Some(Dictionary(dom',cod,rng))
+        | None ->
+            match Ty.reduce cod with
+            | Some(cod') ->
+                Some(Dictionary(dom,cod',rng))
+            | None ->
+                None
+    | Capsule(tyContents,q,rng) ->
+        match Ty.reduce tyContents with
+        | Some(tyContents') ->
+            Some(Capsule(tyContents',q,rng))
+        | None ->
+            None
+    | Prod(tyL,tyR,rng) ->
+        match Ty.reduce tyL with
+        | Some(tyL') ->
+            Some(Prod(tyL',tyR,rng))
+        | None ->
+            match Ty.reduce tyR with
+            | Some(tyR') ->
+                Some(Prod(tyL,tyR',rng))
+            | None ->
+                None
+    | Sum(tyL, tyR, rng) ->
+        match Ty.reduce tyL with
+        | Some(tyL') ->
+            Some(Prod(tyL',tyR,rng))
+        | None ->
+            match Ty.reduce tyR with
+            | Some(tyR') ->
+                Some(Prod(tyL,tyR',rng))
+            | None ->
+                None
+    | IVar(tyContents, rng) ->
+        match Ty.reduce tyContents with
+        | Some(tyContents') ->
+            Some(IVar(tyContents', rng))
+        | None ->
+            None
+    | TyAlias(name,rng) ->
+        if name = x then
+            s
+        else
+            TyAlias(name,rng)
+    | ForallTy(varId,kind,body,rng) ->
+        if varId = x then
+            ForallTy(varId, kind, body, rng)
+        else
+            ForallTy(varId,kind,Ty.subst body x s, rng)
+    | Partial(tyContents, rng) ->
+        Partial(Ty.subst tyContents x s, rng)
+    | ForallTyApp(forallTy, argTy, rng) ->
+        ForallTyApp(Ty.subst forallTy x s, Ty.subst argTy x s, rng)
 
 type Range = Position * Position
 
@@ -14,384 +99,458 @@ type Range = Position * Position
     | Success of result : Kind
     | Failure of stack : List<string*Range>
 
+ let makeDictionarySemilat(pDomTy : P.Ty) (pCodTy : P.Ty) (pDomComp : P.Term) (jCod : P.Term) =
+    let resTy = P.List (P.Prod(pDomTy, pCodTy))
+    let elemTy = pCodTy
+    resTy,
+    P.EmptyList,
+    P.LetRec("f", "x", resTy, P.Fun(resTy,resTy), P.Abs("y", resTy, 
+        ListCase(V("x"), V("y"), 
+            P.Abs("xh", elemTy, P.Abs("xt", resTy, 
+                P.ListCase(V("y"), V("x"), P.Abs("yh", elemTy, P.Abs("yt", resTy, 
+                    P.BoolCase(P.App(P.App(pDomComp, P.Proj1(V("xh"))), P.Proj1(V("yh"))),
+                        P.Cons(P.Var("xh"), P.App(P.App(V("f"), V("xt")), V("y"))),
+                        P.BoolCase(P.App(P.App(pDomComp, P.Proj1(V("yh"))), P.Proj1(V("xh"))),
+                            P.Cons(P.Var("yh"), P.App(P.App(V("f"), V("x")), V("yt"))),
+                            P.Cons(P.Pair(P.Proj1(V("xh")), P.App(P.App(jCod,P.Proj2(V("xh"))),P.Proj2(V("yh")))), 
+                                    P.App(P.App(V("f"),V("xt")), V("yt")))))))))))))
+
+let makeProdSemilat (pTyL : P.Ty) (pTyR : P.Ty) (bL : P.Term) (bR : P.Term) 
+                    (jL : P.Term) (jR : P.Term) =
+    let resTy = P.Prod(pTyL, pTyR)
+    let resBot = P.Pair(bL, bR)
+    let resJoin = P.Abs("x", resTy, P.Abs("y", resTy, 
+                    P.Pair(P.App(P.App(jL, P.Proj1(V("x"))),P.Proj1(V("y"))),
+                            P.App(P.App(jR,P.Proj2(V("x"))), P.Proj2(V("y"))))))    
+    resTy, resBot, resJoin
+
+let makeIVarSemilat (elemTy : P.Ty) (elemComp : P.Term) =
+    let resTy = P.List elemTy
+    resTy,
+    EmptyList,
+    P.LetRec("f", "x", resTy, P.Fun(resTy,resTy), P.Abs("y", resTy, 
+        P.ListCase(V("x"), V("y"), 
+            P.Abs("xh", elemTy, P.Abs("xt", resTy, 
+                P.ListCase(V("y"), V("x"), P.Abs("yh", elemTy, P.Abs("yt", resTy, 
+                    P.BoolCase(P.App(P.App(elemComp, P.Proj1(V("xh"))), P.Proj1(V("yh"))),
+                        P.Cons(P.Var("xh"), P.App(P.App(V("f"), V("xt")), V("y"))),
+                        P.BoolCase(P.App(P.App(elemComp, P.Proj1(V("yh"))), P.Proj1(V("xh"))),
+                            P.Cons(V("yh"), P.App(P.App(V("f"), V("x")), V("yt"))),
+                            P.Cons(V("xh"), P.App(P.App(V("f"),V("xt")), V("yt")))))))))))))
+
+let makePartialSemilat (ty : P.Ty) (bot : P.Term) (join : P.Term) =
+    let resTy = P.Sum(ty, P.Unit)
+    resTy,
+    P.In1(bot),
+    P.Abs("x", resTy, P.Abs("y", resTy, 
+        P.SumCase(V("x"), 
+            P.Abs("x'", ty, 
+                P.SumCase(V("y"), 
+                    P.Abs("y'", ty, P.In1(P.App(P.App(join, V("x'")), V("y'")))),
+                    P.In2(P.PrimUnitVal))),
+            P.Abs("x'", P.Unit, P.In2(P.PrimUnitVal)))))
+
+let makeProdToset (pTyL : P.Ty) (compL : P.Term) (pTyR : P.Ty) (compR : P.Term) =
+    let resTy = P.Prod(pTyL, pTyR)
+    resTy,
+    P.Abs("x", resTy, P.Abs("y", resTy, P.BoolCase(P.App(P.App(compL, P.Proj1(P.Var("x"))),P.Proj1(P.Var("y"))),
+                                                    P.BBTrue,
+                                                    P.App(P.App(compR, P.Proj2(P.Var("x"))),P.Proj2(P.Var("y"))))))
+
+let makeSumToset (pTyL : P.Ty) (compL : P.Term) (pTyR : P.Ty) (compR : P.Term) =
+    let resTy = P.Sum(pTyL, pTyR)
+    resTy,
+    P.Abs("x", resTy, P.Abs("y", resTy, 
+        P.SumCase(P.Var("x"), 
+                P.Abs("x'", pTyL, P.SumCase(P.Var("y"), P.Abs("y'", pTyL, P.App(P.App(compL,P.Var("x'")), P.Var("y'"))), BBFalse)),
+                P.Abs("x'", pTyR, P.SumCase(P.Var("y"), P.Abs("y'", pTyR, P.App(P.App(compR,P.Var("x'")), P.Var("y'"))), BBFalse)))))          
+
 /// kCheckToset tenv ty = res
 /// tenv - the type environment to check under
 /// ty   - the type to check
 /// res  - None if the type is a toset, 
 ///        (Some explanation), otherwise, where explanation is a stack of errors
-let rec kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Option<List<string * Range>> =
+let rec kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Check<SemPoset * SemToset> =
     let errorMsg = "Type " + ty.ToString() + " is not a toset"
     let tyVarEnv, tyBaseEnv = tenv.tyVarEnv, tenv.tyBaseEnv
     match ty with
     | BaseTy(name,rng) ->
         match tyBaseEnv.TryFind(name) with
-        | Some( KProper(kindRef,_) ) when kindRef.Contains( Toset ) ->
+        | Some( KProper(semPoset, Some(semToset),_,_) ) ->
             // all base types are tosets
-            None
-        | Some ( KProper(_,_) ) ->
-            Some [errorMsg, rng]
+            Result (semPoset, semToset)
+        | Some ( KProper(_,_,_,_) ) ->
+            Error [errorMsg, rng]
         | Some ( KOperator(_,_,rng) ) ->
-            Some [errorMsg + ": has an operator kind, whereas tosets must have proper kind", rng]
+            Error [errorMsg + ": has an operator kind, whereas tosets must have proper kind", rng]
         | None ->
-            Some([errorMsg + ": no base type " + name + "defined", rng])
+            Error [errorMsg + ": no base type " + name + "defined", rng]
     | FunTy(_,_,_,rng) ->
-        Some([errorMsg + ": no function type is considered a toset", rng])
+        Error [errorMsg + ": no function type is considered a toset", rng]
     | Dictionary(dom, cod, rng) ->
-        Some([errorMsg + ": no dictionary type is considered a toset", rng])
+        Error [errorMsg + ": no dictionary type is considered a toset", rng]
     | Capsule(ty,q, rng) ->
-        Some([errorMsg + ": no capsule type is considered a toset", rng])
+        Error [errorMsg + ": no capsule type is considered a toset", rng]
     | Prod(tyL, tyR, rng) ->
-        match kCheckToset tenv tyL with
-        | Some(stack) ->
-            Some((errorMsg + ": left component is not a toset type", rng) :: stack)
-        | None ->
-            match kCheckToset tenv tyR with
-            | Some(stack) ->
-                Some((errorMsg + ": right component is not a toset type", rng) :: stack)
-            | None ->
-                None
+        check {
+            let! (pTyL, compL) = withError (errorMsg + ": left component is not a toset type") rng (kCheckToset tenv tyL)
+            let! (pTyR, compR) = withError (errorMsg + ": right component is not a toset type") rng (kCheckToset tenv tyR)
+            let resTy, comp = makeProdToset pTyL compL pTyR compR
+            return resTy, comp
+        }
     | Sum(tyL, tyR, rng) ->
-        match kCheckToset tenv tyL with
-        | Some(stack) ->
-            Some((errorMsg + ": left component is not a toset type", rng) :: stack)
-        | None ->
-            match kCheckToset tenv tyR with
-            | Some(stack) ->
-                Some((errorMsg + ": right component is not a toset type", rng) :: stack)
-            | None ->
-                None
+        check {
+            let! (pTyL, compL) = withError (errorMsg + ": left component is not a toset type") rng (kCheckToset tenv tyL)
+            let! (pTyR, compR) = withError (errorMsg + ": right component is not a toset type") rng (kCheckToset tenv tyR)
+            let resTy, comp = makeSumToset pTyL compL pTyR compR
+            return resTy, comp         
+        }
     | IVar(_, rng) ->
-        Some([(errorMsg + ": no ivar type is considered a toset", rng)])
+        Error [(errorMsg + ": no ivar type is considered a toset", rng)]
     | TyAlias(name, rng) ->
         match tyVarEnv.TryFind name with
-        | Some(KProper(kindRefs,_)) when kindRefs.Contains(Toset) ->
-            None
+        | Some(KProper(semPoset, Some(semToset), _, _)) ->
+            Result (semPoset, semToset)
         | Some(k) ->
-            Some [(name + " has kind " + k.ToString() + " rather than TOSET", rng)]
+            Error [(name + " has kind " + k.ToString() + " rather than TOSET", rng)]
         | None ->
-            Some [("undeclared type " + name, rng)]
-    | ForallTy(varId, kind, body, rng) ->
-        Some [(errorMsg + ": no type abstraction is totally ordered", rng)]
+            Error [("undeclared type " + name, rng)]
+    | TyOp(varId, kind, body, rng) ->
+        Error [(errorMsg + ": no type operator is totally ordered", rng)]
     | Partial(ty,rng) ->
-        Some [(errorMsg + ": no type in the partiality monad is totally ordered",rng)]
-    | ForallTyApp(tyForall, tyArg, rng) ->
-        match kSynth tenv tyForall with
-        | Success(KOperator(dom,cod,_)) ->
-            match kSynth tenv tyArg with
-            | Success(KProper(kPropArg,_)) when kPropArg.Contains(dom) ->
-                match cod with
-                | KProper(ks,_) when ks.Contains(Toset) ->
-                    None
-                | _ ->
-                    Some [errorMsg + ": forall body kind " + cod.ToString() + " is not toset",noRange]
-            | Success(KProper(kPropArg,_)) ->
-                Some [errorMsg + ": type operator argument of kind " + dom.ToString() + " expected, but got " + kPropArg.ToString(), rng]
-            | Success(KOperator(_,_,rngArg)) ->
-                Some [errorMsg + ": argument to type application should have proper kind, but " + tyArg.ToString() + " is a type operator",rngArg]
-            | Failure(stack) ->
-                Some((errorMsg,rng) :: stack)
-        | Success(KProper(k,rngOp)) ->
-            Some [errorMsg + ": " + tyForall.ToString() + " is not a type operator",rngOp]
-        | Failure(stack) ->
-            Some((errorMsg,rng) :: stack)
+        Error [(errorMsg + ": no type in the partiality monad is totally ordered",rng)]
+    //| ForallTyApp(tyForall, tyArg, rng) ->
+    //    match kSynth tenv tyForall with
+    //    | Success(KOperator(dom,cod,_)) ->
+    //        match kSynth tenv tyArg with
+    //        | Success(KProper(semPoset,Some(semToset),_,_) as k) when hasKind k dom ->
+    //            match cod with
+    //            | KProper(ks,_) when ks.Contains(Toset) ->
+    //                None
+    //            | _ ->
+    //                Some [errorMsg + ": forall body kind " + cod.ToString() + " is not toset",noRange]
+    //        | Success(KProper(kPropArg,_)) ->
+    //            Some [errorMsg + ": type operator argument of kind " + dom.ToString() + " expected, but got " + kPropArg.ToString(), rng]
+    //        | Success(KOperator(_,_,rngArg)) ->
+    //            Some [errorMsg + ": argument to type application should have proper kind, but " + tyArg.ToString() + " is a type operator",rngArg]
+    //        | Failure(stack) ->
+    //            Some((errorMsg,rng) :: stack)
+    //    | Success(KProper(k,rngOp)) ->
+    //        Some [errorMsg + ": " + tyForall.ToString() + " is not a type operator",rngOp]
+    //    | Failure(stack) ->
+    //        Some((errorMsg,rng) :: stack)
 
 /// kCheckSemilattice tenv ty = res 
 /// tenv - the type environment to check under
 /// ty - the type to check
 /// ty0 - If ty is a semilattice type, None
 ///       Otherwise, Some explanation, where explanation is an error stack
-and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Option<List<string*Range>> =
+and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term * P.Term> =
     let tyVarEnv, tyBaseEnv = tenv.tyVarEnv, tenv.tyBaseEnv
     let errorMsg = "Type " + ty.ToString() + " is not a semilattice"
     match ty with
     | BaseTy(name,rng) ->
-        // all base types are semilattices
-        None
+        match tyBaseEnv.TryFind(name) with
+        | Some( KProper(semPoset,_,Some(semSemilat),_) ) ->
+            // all base types are tosets
+            Result (semPoset, semSemilat.bot, semSemilat.join)
+        | Some ( KProper(_,_,_,_) ) ->
+            Error [errorMsg, rng]
+        | Some ( KOperator(_,_,rng) ) ->
+            Error [errorMsg + ": has an operator kind, whereas tosets must have proper kind", rng]
+        | None ->
+            Error [errorMsg + ": no base type " + name + "defined", rng]
     | FunTy(_,_,_,rng) ->
-        Some [errorMsg + ": function types are not considered semilattice types", rng]
+        Error [errorMsg + ": function types are not considered semilattice types", rng]
     | Dictionary(dom, cod, rng) ->
-        match kCheckToset tenv dom with 
-        | Some(stack) ->
-            Some((errorMsg + ": the domain of a dictionary must be a toset", rng) :: stack)
-        | None ->
-            match kCheckSemilattice tenv cod with
-            | Some(stack) ->
-                Some((errorMsg + ": the codomain type of a dictionary must be a semilattice",rng) :: stack)
-            | None ->
-                None
+        check {
+            let! (pDomTy, pDomComp) = withError (errorMsg + ": the domain of a dictionary must be a toset") rng (kCheckToset tenv dom)
+            let! (pCodTy, _, jCod) = withError (errorMsg + ": the domain of a dictionary must be a semilattice") rng (kCheckSemilattice tenv cod)
+            let resTy, bRes, jRes = makeDictionarySemilat pDomTy pCodTy pDomComp jCod
+            return resTy,bRes,jRes
+        }
     | Capsule(ty,q, rng) ->
-        Some [errorMsg + ": capsule types are not considered semilattice types", rng]
+        Error [errorMsg + ": capsule types are not considered semilattice types", rng]
     | Prod(tyL,tyR, rng) ->
-        match kCheckSemilattice tenv tyL with
-        | Some(stack) ->
-            Some((errorMsg + ": left component is not a semilattice type", rng) :: stack)
-        | None ->
-            match kCheckSemilattice tenv tyR with
-            | Some(stack) ->
-                Some((errorMsg + ": right component is not a semilattice type",rng) :: stack)
-            | None ->
-                None
+        check {
+            let! (tyL, bL, jL) = withError (errorMsg + ": left component is not a semilattice type") rng (kCheckSemilattice tenv tyL)
+            let! (tyR, bR, jR) = withError (errorMsg + ": right component is not a semilattice type") rng (kCheckSemilattice tenv tyR)
+            let resTy, resBot, resJoin = makeProdSemilat tyL tyR bL bR jL jR
+            return resTy, resBot, resJoin
+        }
     | Sum(_,_,rng) ->
-        Some [(errorMsg + ": sum types are not semilattice types",rng)]
+        Error [(errorMsg + ": sum types are not semilattice types",rng)]
     | IVar(tyContents, rng) ->
-        match kCheckToset tenv tyContents with
-        | Some(stack) ->
-            Some((errorMsg + ": the content type of an ivar must be a toset type",rng) :: stack)
-        | None ->
-            None
+        check {
+            let! (elemTy, elemComp) = 
+                withError (errorMsg + ": the content type of an ivar must be a toset type") rng (kCheckToset tenv tyContents)
+            let resTy, resBot, resJoin = makeIVarSemilat elemTy elemComp
+            return (resTy, resBot, resJoin)
+        }
     | TyAlias(name, rng)->
         match tyVarEnv.TryFind name with
         | None -> 
-            Some(["Type variable " + name + " undeclared", rng])
-        | Some( KProper(properKindRef,_) ) when properKindRef.Contains(Semilattice) ->
-            None
+            Error ["Type variable " + name + " undeclared", rng]
+        | Some( KProper(semPoset,_,Some({ bot = bot ; join = join }),_) ) ->
+            Result (semPoset, bot, join)
         | Some(k) ->
             let explanation = ": type variable " + name + " bound to " + k.ToString() + ", but semilattice expected" 
-            Some([errorMsg + explanation, rng])    
-    | ForallTy(_,_,_,rng) ->
-        Some([(errorMsg + ": type abstractions do not denote semilattices", rng)])
+            Error [errorMsg + explanation, rng]    
+    | TyOp(_,_,_,rng) ->
+        Error [(errorMsg + ": type operators do not denote semilattices", rng)]
     | Partial(tyContents,rng) ->
-        match kCheckSemilattice tenv tyContents with
-        | None ->
-            None
-        | Some(stack) ->
-            Some((errorMsg + ": [ty] is only a semilattice if ty is a semilattice",rng) :: stack)
-    | ForallTyApp(tyForall, tyArg, rng) ->
-        match kSynth tenv tyForall with
-        | Success(KOperator(dom,cod,_)) ->
-            match kSynth tenv tyArg with
-            | Success(KProper(kPropArg,_)) when kPropArg.Contains(dom) ->
-                match cod with
-                | KProper(ks,_) when ks.Contains(Semilattice) ->
-                    None
-                | _ ->
-                    Some [errorMsg + ": forall body kind " + cod.ToString() + " is not semilattice",noRange]
-            | Success(KProper(kPropArg,_)) ->
-                Some [errorMsg + ": type operator argument of kind " + dom.ToString() + " expected, but got " + kPropArg.ToString(), rng]
-            | Success(KOperator(_,_,rngArg)) ->
-                Some [errorMsg + ": argument to type application should have proper kind, but " + tyArg.ToString() + " is a type operator",rngArg]
-            | Failure(stack) ->
-                Some((errorMsg,rng) :: stack)
-        | Success(KProper(k,rngOp)) ->
-            Some [errorMsg + ": " + tyForall.ToString() + " is not a type operator",rngOp]
-        | Failure(stack) ->
-            Some((errorMsg,rng) :: stack)       
+        check {
+            let! (ty, bot, join) = withError (errorMsg + ": [ty] is only a semilattice if ty is a semilattice") rng (kCheckSemilattice tenv tyContents)
+            let resTy, resBot, resJoin = makePartialSemilat ty bot join
+            return (resTy, resBot, resJoin)
+        }
+    //| ForallTyApp(tyForall, tyArg, rng) ->
+    //    match kSynth tenv tyForall with
+    //    | Success(KOperator(dom,cod,_)) ->
+    //        match kSynth tenv tyArg with
+    //        | Success(KProper(kPropArg,_)) when kPropArg.Contains(dom) ->
+    //            match cod with
+    //            | KProper(ks,_) when ks.Contains(Semilattice) ->
+    //                None
+    //            | _ ->
+    //                Some [errorMsg + ": forall body kind " + cod.ToString() + " is not semilattice",noRange]
+    //        | Success(KProper(kPropArg,_)) ->
+    //            Some [errorMsg + ": type operator argument of kind " + dom.ToString() + " expected, but got " + kPropArg.ToString(), rng]
+    //        | Success(KOperator(_,_,rngArg)) ->
+    //            Some [errorMsg + ": argument to type application should have proper kind, but " + tyArg.ToString() + " is a type operator",rngArg]
+    //        | Failure(stack) ->
+    //            Some((errorMsg,rng) :: stack)
+    //    | Success(KProper(k,rngOp)) ->
+    //        Some [errorMsg + ": " + tyForall.ToString() + " is not a type operator",rngOp]
+    //    | Failure(stack) ->
+    //        Some((errorMsg,rng) :: stack)       
             
-and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Option<List<string*Range>> =
+and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty> =
     let tyVarEnv, tyBaseEnv = tenv.tyVarEnv, tenv.tyBaseEnv
     let errorMsg = "Type " + ty.ToString() + " is not a proset"
     match ty with
     | BaseTy(name,rng) ->
         match tyBaseEnv.TryFind(name) with
-        | Some( KProper(kProperRefs,_) ) when kProperRefs.Contains(Proset) ->
-            None
+        | Some( KProper(ty,_,_,_) ) ->
+            Result ty
         | Some( k ) ->
-            Some [errorMsg + ": instead has kind " + k.ToString(), rng]
+            Error [errorMsg + ": instead has kind " + k.ToString(), rng]
         | None ->
-            Some [errorMsg + ": base type '" + name + "' unknown", rng]
+            Error [errorMsg + ": base type '" + name + "' unknown", rng]
     | FunTy(dom,q,cod,rng) ->
-        match kCheckProset tenv dom with
-        | Some(stack) ->
-            Some((errorMsg + ": domain is not a proset", rng) :: stack)
-        | None ->
-            match kCheckProset tenv cod with
-            | None ->
-                None
-            | Some(stack) ->
-                Some((errorMsg + ": codomain is not a proset", rng) :: stack)
+        check {
+            let! pTyDom = withError (errorMsg + ": domain is not a poset") rng (kCheckProset tenv dom)
+            let! pTyCod = withError (errorMsg + ": codomain is not a poset") rng (kCheckProset tenv cod)
+            return P.Fun(pTyDom, pTyCod)
+        }
     | Dictionary(dom, cod, rng) ->
-        match kCheckToset tenv dom with
-        | Some(stack) ->
-            Some((errorMsg + ": domain is not a toset", rng) :: stack)
-        | None ->
-            match kCheckSemilattice tenv cod with
-            | None ->
-                None
-            | Some(stack) ->
-                Some((errorMsg + ": codomain is not a semilattice", rng) :: stack)        
+        check {
+            let! pTyDom,_ = withError (errorMsg + ": domain is not a toset") rng (kCheckToset tenv dom)
+            let! pTyCod = withError (errorMsg + ": codomain is not a poset") rng (kCheckProset tenv cod)
+            return P.List(P.Prod(pTyDom,pTyCod))
+        }
     | Capsule(tyContents, q, rng) ->
-        //TODO: generate error if q has no left-adjoint
-        match kCheckProset tenv tyContents with
-        | Some(stack) ->
-            Some((errorMsg, rng) :: stack)
-        | None ->
-            None
+        check {
+            let! pTyContents = withError (errorMsg + ": content type is not a poset") rng (kCheckProset tenv tyContents)
+            return pTyContents
+        }
     | Prod(tyL, tyR, rng) ->
-        match kCheckProset tenv tyL with
-        | Some(stack) ->
-            Some( (errorMsg + ": left component is not a proset", rng) :: stack )
-        | None ->
-            match kCheckProset tenv tyR with
-            | Some(stack) ->
-                Some( (errorMsg + ": right component is not a proset", rng) :: stack )
-            | None ->
-                None
+        check {
+            let! pTyL = withError (errorMsg + ": left component type is not a poset") rng (kCheckProset tenv tyL)
+            let! pTyR = withError (errorMsg + ": right component type is not a poset") rng (kCheckProset tenv tyR)
+            return P.Prod(pTyL, pTyR)
+        }
     | Sum(tyL, tyR, rng) ->
-        match kCheckProset tenv tyL with
-        | Some(stack) ->
-            Some( (errorMsg + ": left component is not a proset", rng) :: stack )
-        | None ->
-            match kCheckProset tenv tyR with
-            | Some(stack) ->
-                Some( (errorMsg + ": right component is not a proset", rng) :: stack )
-            | None ->
-                None
+        check {
+            let! pTyL = withError (errorMsg + ": left component type is not a poset") rng (kCheckProset tenv tyL)
+            let! pTyR = withError (errorMsg + ": right component type is not a poset") rng (kCheckProset tenv tyR)
+            return P.Sum(pTyL, pTyR)
+        }
     | IVar(tyContents, rng) ->
-        // really we'd like to have some notion of eqtypes for this
-        // or, at least, a notion of certain types having *computable* information orderings
-        match kCheckToset tenv tyContents with
-        | Some(stack) ->
-            Some((errorMsg,rng) :: stack)
-        | None ->
-            None
+        check {
+            let! pTyContents,_ = withError (errorMsg + ": content type is not a toset") rng (kCheckToset tenv tyContents)
+            return pTyContents
+        }
     | TyAlias(name, rng) ->
         match tyVarEnv.TryFind name with
+        | Some(KProper(pTy,_,_,_)) ->
+            Result pTy
         | Some(_) ->
-            None
+            failwith "type operators have been removed from this program, so this case should not execute"
         | None ->
-            Some [errorMsg + " type " + name + " not declared", rng]
-    | ForallTy(varId, kind, body, rng) ->
-        Some([(errorMsg + ": type abstractions do not denote prosets",rng)])
+            Error [errorMsg + " type " + name + " not declared", rng]
+    | TyOp(varId, kind, body, rng) ->
+        Error [(errorMsg + ": type operators do not denote prosets",rng)]
     | Partial(tyContents,rng) ->
-        match kCheckProset tenv tyContents with
-        | None ->
-            None
-        | Some(stack) ->
-            Some((errorMsg,rng) :: stack)
-    | ForallTyApp(tyForall, tyArg, rng) ->
-        match kSynth tenv tyForall with
-        | Success(KOperator(dom,cod,_)) ->
-            match kSynth tenv tyArg with
-            | Success(KProper(kPropArg,_)) when kPropArg.Contains(dom) ->
-                match cod with
-                | KProper(ks,_) when ks.Contains(Proset) ->
-                    None
-                | _ ->
-                    Some [errorMsg + ": forall body kind " + cod.ToString() + " is not proset",noRange]
-            | Success(KProper(kPropArg,_)) ->
-                Some [errorMsg + ": type operator argument of kind " + dom.ToString() + " expected, but got " + kPropArg.ToString(), rng]
-            | Success(KOperator(_,_,rngArg)) ->
-                Some [errorMsg + ": argument to type application should have proper kind, but " + tyArg.ToString() + " is a type operator",rngArg]
-            | Failure(stack) ->
-                Some((errorMsg,rng) :: stack)
-        | Success(KProper(k,rngOp)) ->
-            Some [errorMsg + ": " + tyForall.ToString() + " is not a type operator",rngOp]
-        | Failure(stack) ->
-            Some((errorMsg,rng) :: stack)       
-
-and kSynth (tenv : TypeEnvironment) (ty : Ty) : KindSynthResult =
+        check {
+            let! pTyContents = withError (errorMsg + ": underlying type is not a poset") rng (kCheckProset tenv tyContents)
+            return P.Sum(pTyContents, P.Unit)
+        }
+    //| ForallTyApp(tyForall, tyArg, rng) ->
+    //    match kSynth tenv tyForall with
+    //    | Success(KOperator(dom,cod,_)) ->
+    //        match kSynth tenv tyArg with
+    //        | Success(KProper(kPropArg,_)) when kPropArg.Contains(dom) ->
+    //            match cod with
+    //            | KProper(ks,_) when ks.Contains(Proset) ->
+    //                None
+    //            | _ ->
+    //                Some [errorMsg + ": forall body kind " + cod.ToString() + " is not proset",noRange]
+    //        | Success(KProper(kPropArg,_)) ->
+    //            Some [errorMsg + ": type operator argument of kind " + dom.ToString() + " expected, but got " + kPropArg.ToString(), rng]
+    //        | Success(KOperator(_,_,rngArg)) ->
+    //            Some [errorMsg + ": argument to type application should have proper kind, but " + tyArg.ToString() + " is a type operator",rngArg]
+    //        | Failure(stack) ->
+    //            Some((errorMsg,rng) :: stack)
+    //    | Success(KProper(k,rngOp)) ->
+    //        Some [errorMsg + ": " + tyForall.ToString() + " is not a type operator",rngOp]
+    //    | Failure(stack) ->
+    //        Some((errorMsg,rng) :: stack)       
+    
+and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
     let tyVarEnv, tyBaseEnv = tenv.tyVarEnv, tenv.tyBaseEnv
     let errorMsg = "Type " + ty.ToString() + " is not well-formed"
+    let getProper (role : string) (k : Kind) : Check< SemPoset * Option<SemToset> * Option<SemSemilat> > =
+        match k with
+        | KProper(semPoset, semToset, semSemilat,_) ->
+            Result (semPoset, semToset, semSemilat)
+        | _ ->
+            Error [role + " does not have a proper kind", noRange]
     match ty with
     | BaseTy(name,rng) ->
         match tyBaseEnv.TryFind(name) with
         | Some(kind) ->
-            Success kind
+            Result kind
         | None ->
-            Failure [errorMsg + ": base type '" + name + "' unknown", rng]
+            Error [errorMsg + ": base type '" + name + "' unknown", rng]
     | FunTy(dom,q,cod,rng) ->
-        match kSynth tenv dom with
-        | Failure(stack) ->
-            Failure ((errorMsg + ": domain is not a well-kinded", rng) :: stack)
-        | Success(kDom) ->
-            match kSynth tenv cod with
-            | Success(kCod) ->
-                Success(KProper(Set [Proset], noRange))
-            | Failure(stack) ->
-                Failure((errorMsg + ": codomain is not well-kinded", rng) :: stack)
+        check {
+            let! kDom = withError (errorMsg + ": domain is not well-kinded") rng (kSynth tenv dom)
+            let! kCod = withError (errorMsg + ": codomain is not well-kinded") rng (kSynth tenv cod)
+            let! pDomTy, _, _ = getProper "domain type" kDom
+            let! pCodTy, _, _ = getProper "codomain type" kCod
+            return KProper(P.Fun(pDomTy,pCodTy), None, None, noRange)
+        }
      | Dictionary(dom, cod, rng) ->
-        match kCheckToset tenv dom with
-        | Some(stack) ->
-            Failure((errorMsg + ": domain is not a toset", rng) :: stack)
-        | None ->
-            match kCheckSemilattice tenv cod with
+        check {
+            let! kDom = withError (errorMsg + ": domain is not a well-kinded") rng (kSynth tenv dom)
+            let! kCod = withError (errorMsg + ": codomain is not well-kinded") rng (kSynth tenv cod)
+            let! pDomTy, domToset, domSemilat = getProper "domain type" kDom
+            let! pCodTy, codToset, codSemilat = getProper "codomain type" kCod
+            let! pDomComp = 
+                match domToset with
+                | Some(comp) -> Result comp
+                | None -> Error ["dictionary domain " + dom.ToString() + " is not a toset type",rng]
+            match codSemilat with
+            | Some({bot = bCod ; join = jCod}) ->
+                let resTy, bot, join = makeDictionarySemilat pDomTy pCodTy pDomComp jCod
+                return KProper(resTy, None, None, noRange)
             | None ->
-                Success(KProper(Set [Semilattice],noRange))
-            | Some(stack) ->
-                Failure((errorMsg + ": codomain is not a semilattice", rng) :: stack)        
+                let resTy = P.List (P.Prod(pDomTy,pCodTy))
+                return KProper(resTy, None, None, noRange)
+        }
     | Capsule(tyContents, q, rng) ->
-        //TODO: generate error if q has no left-adjoint
-        match kCheckProset tenv tyContents with
-        | Some(stack) ->
-            Failure((errorMsg + ": capsule content not a proset",rng) :: stack)
-        | None ->
-            //TODO: if tyContents is a toset, shouldn't that propagate? Maybe we should just use kSynth here
-            Success(KProper(Set [Proset], noRange))
+        check {
+            // should we generate an error here if q is *?
+            let! pTyContents = withError (errorMsg + ": capsule content not a proset") rng (kCheckProset tenv tyContents)
+            return KProper(pTyContents, None, None, noRange)
+        }
     | Prod(tyL, tyR, rng) ->
-        match kSynth tenv tyL with
-        | Failure(stack) ->
-            Failure( (errorMsg + ": left component is not well-formed", rng) :: stack )
-        | Success( KProper(kRefsL,_) ) ->
-            match kSynth tenv tyR with
-            | Failure(stack) ->
-                Failure( (errorMsg + ": right component is not well-formed", rng) :: stack )
-            | Success( KProper(kRefsR,_) ) ->
-                Success( KProper(Set.intersect kRefsL kRefsR, noRange) )
-            | Success( KOperator(_,_,_) as kop ) ->
-                Failure( [(errorMsg + ": right component type has kind" + kop.ToString() + " but a proper type is expected", rng)] )
-        | Success( KOperator(_,_,_) as kop ) ->
-            Failure( [(errorMsg + ": left component type has kind" + kop.ToString() + " but a proper type is expected",rng)] )
+        check {
+            let! kL = withError (errorMsg + ": left type is not well-kinded") rng (kSynth tenv tyL)
+            let! kR = withError (errorMsg + ": right type is not well-kinded") rng (kSynth tenv tyR)
+            let! pTyL, optTosetL, optSemilatL = getProper "left type" kL
+            let! pTyR, optTosetR, optSemilatR = getProper "right type" kR
+            let pTy = P.Prod(pTyL, pTyR)
+            let semToset = 
+                match optTosetL, optTosetR with
+                | Some(compL), Some(compR) ->
+                    let _, comp = makeProdToset pTyL compL pTyR compR
+                    Some(comp)
+                | _ ->
+                    None
+            let semSemilat =
+                match optSemilatL, optSemilatR with
+                | Some({bot = botL ; join = joinL }), Some({bot = botR ; join = joinR}) ->
+                    let _, bot, join = makeProdSemilat pTyL pTyR botL botR joinL joinR
+                    Some({bot = bot; join = join})
+                | _ ->
+                    None
+            return KProper(pTy, semToset, semSemilat, noRange)
+        }
     | Sum(tyL, tyR, rng) ->
-        match kSynth tenv tyL with
-        | Failure(stack) ->
-            Failure( (errorMsg + ": left component is not well-formed", rng) :: stack )
-        | Success( KOperator(_,_,_) as kop ) ->
-            Failure( [(errorMsg + ": left component has kind " + kop.ToString() + " but a proper type is expected",rng)] )
-        | Success( KProper(kRefsL,_) ) ->
-            match kSynth tenv tyR with
-            | Failure(stack) ->
-                Failure( (errorMsg + ": right component is not a well-formed", rng) :: stack )
-            | Success( KOperator(_,_,_) as kop ) ->
-                Failure( [(errorMsg + ": right component has kind " + kop.ToString() + " but a proper type is expected",rng)] )
-            | Success( KProper(kRefsR,_) ) ->
-                Success(KProper(Set.difference (Set.intersect kRefsL kRefsR) (Set [Semilattice]), noRange)) 
+        check {
+            let! kL = withError (errorMsg + ": left type is not well-kinded") rng (kSynth tenv tyL)
+            let! kR = withError (errorMsg + ": right type is not well-kinded") rng (kSynth tenv tyR)
+            let! pTyL, optTosetL, optSemilatL = getProper "left type" kL
+            let! pTyR, optTosetR, optSemilatR = getProper "right type" kR
+            let pTy = P.Prod(pTyL, pTyR)
+            let semToset = 
+                match optTosetL, optTosetR with
+                | Some(compL), Some(compR) ->
+                    let _, comp = makeSumToset pTyL compL pTyR compR
+                    Some(comp)
+                | _ ->
+                    None
+            return KProper(pTy, semToset, None, noRange)
+        }
     | IVar(tyContents, rng) ->
-        // really we'd like to have some notion of eqtypes for this
-        // or, at least, a notion of certain types having *computable* information orderings
-        match kSynth tenv tyContents with
-        | Failure(stack) ->
-            Failure((errorMsg + ": content type is not well-formed",rng) :: stack)
-        | Success( KOperator(_,_,_) as kop ) ->
-            Failure( [errorMsg + ": contents type expected to be proper, but instead has kind " + kop.ToString(), rng] )
-        | Success( KProper(krefs,_) ) ->
-            match krefs.Contains(Toset) with
-            | true ->
-                Success( KProper(Set [Semilattice;Proset],noRange) )
-            | false ->
-                Failure( [errorMsg + ": contents type " + tyContents.ToString() + " not totally ordered", rng] )
+        check {
+            let! pTy, pComp = withError (errorMsg + ": underlying type is not totally ordered") rng (kCheckToset tenv tyContents)
+            let resTy, bot, join = makeIVarSemilat pTy pComp
+            return KProper(resTy, None, Some({bot = bot ; join = join}), noRange) 
+        }
     | TyAlias(name, rng) ->
         match tyVarEnv.TryFind name with
         | Some(k) ->
-            Success(k)
+            Result k
         | None ->
-            Failure [errorMsg + " type " + name + " not declared", rng]
+            Error [errorMsg + " type " + name + " not declared", rng]
     | ForallTy(varId, kind, body, rng) ->
-        match kSynth { tenv with tyVarEnv = tyVarEnv.Add(varId, KProper(Set [kind],noRange)) } body with
-        | Success(k) ->
-            Success(k)
-        | Failure(stack) ->
-            Failure( (errorMsg + ": body not well-formed", rng) :: stack)
+        // this case is purely for checking - we don't actually generate semantics 
+        // of forall types until they are applied. However, we will still need to build some stub semantics 
+        // to leverage other code.
+        check {
+            let kDom = 
+                match kind with
+                | Poset ->
+                    KProper(P.Unit, None, None, noRange)
+                | Semilattice ->
+                    KProper(P.Unit, None, Some({ bot = P.PrimUnitVal ; join = P.PrimUnitVal }), noRange)
+                | Toset ->
+                    KProper(P.Unit, Some(P.PrimUnitVal), None, noRange)
+            let! kCod = withError (errorMsg + ": body not well-formed") rng (kSynth {tenv with tyVarEnv = tyVarEnv.Add(varId,kDom)} body)
+            return KOperator(kind,kCod,noRange)
+        }
     | Partial(tyContents, rng) ->
-        match kSynth tenv tyContents with
-        | Success(KProper(krefs,_)) ->
-            Success(KProper(krefs.Remove(Toset),noRange))
-        | Success(k) ->
-            Failure [errorMsg + ": in [ ty ], ty must have a proper kind, but kind " + k.ToString() + " was computed.", rng] 
-        | Failure(stack) ->
-            Failure((errorMsg, rng) :: stack)
+        check {
+            let! k = withError errorMsg rng (kSynth tenv tyContents)
+            let! resTy, optToset, optSemi = getProper "underlying type" k
+            let semi = 
+                match optSemi with
+                | Some {bot = bot'; join = join'} ->
+                    let _, bot, join = makePartialSemilat resTy bot' join' 
+                    Some {bot = bot; join = join}
+                | None ->
+                    None
+            return KProper(P.Sum(resTy, Unit), None, semi, noRange)
+        }
     | ForallTyApp(forallTy, argTy, rng) ->
-        match kSynth tenv forallTy with
-        | Success(KOperator(dom,cod,rngOp)) ->
-            match kSynth tenv argTy with
-            | Success(KProper(kPropArg,_)) when kPropArg.Contains(dom) ->
-                Success(cod)
-            | Success(KProper(kPropArg,_)) ->
-                Failure [errorMsg + ": type operator argument of kind " + dom.ToString() + " expected, but got " + kPropArg.ToString(), rng]
-            | Success(KOperator(_,_,rngArg)) ->
-                Failure [errorMsg + ": argument to type application should have proper kind, but " + argTy.ToString() + " is a type operator",rngArg]
-            | Failure(stack) ->
-                Failure((errorMsg,rng) :: stack)
-        | Success(KProper(k,rngOp)) ->
-            Failure [errorMsg + ": " + forallTy.ToString() + " is not a type operator",rngOp]
-        | Failure(stack) ->
-            Failure((errorMsg,rng) :: stack)
+        check {
+            let! kOp = withError errorMsg rng (kSynth tenv forallTy)
+            let! opDom, opCod =
+                match kOp with
+                | KProper(_,_,_,rngOp) ->
+                    Error [errorMsg + ": " + forallTy.ToString() + " is not a type operator", rngOp]
+                | KOperator(dom, cod, rng) ->
+                    Result (dom, cod)
+            let! kArg = withError errorMsg rng (kSynth tenv argTy)
+            let! pArgTy, optArgToset, optArgSemi = getProper (argTy.ToString()) kArg
+            let! _ = 
+                match hasKind kArg opDom with
+                | true -> 
+                    ()
+                | false -> 
+                    Error ["kind " + kArg.ToString() + " of type argument " + argTy.ToString() + " does not match expected kind " + opDom.ToString(), rng]
+            
+        }

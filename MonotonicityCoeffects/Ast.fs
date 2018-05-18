@@ -80,18 +80,48 @@ type Coeffect =
 
 type ProperKind =
     | Toset 
-    | Proset
+    | Poset
     | Semilattice
 
     override this.ToString() =
         match this with
         | Toset -> "TOSET"
-        | Proset -> "PROSET"
+        | Poset -> "POSET"
         | Semilattice -> "SEMILATTICE"                
 
+/// Semantic interpretation of toset as a PCF comparison operator
+type SemToset = PCF.Term
+/// Posets semantically interpreted as PCF type paired with predicate (the latter irrelevant for our purposes)
+type SemPoset = PCF.Ty
+/// Semilattices semantically interpreted as tuple of PCF terms (bottom element , join operator)
+type SemSemilat = { bot : PCF.Term ; join : PCF.Term }
+
 type Kind =
-  | KProper of Set<ProperKind> * Range
+  /// poset - underlying PCF proper type (i.e. the set underlying the poset -- the order is an RHOL predicate beyond the 
+  ///         scope of this prototype)
+  /// toset - Some(semToset) if classified type provides a toset interpretation, None otherwise
+  /// semilat - Some(semSemilat) if classified type provides a semilattice interpretation, None otherwise
+  | KProper of poset : SemPoset * toset : Option<SemToset> * semilat : Option<SemSemilat> * Range
   | KOperator of dom : ProperKind * cod : Kind * Range
+  // Forall terms have proper kind, but the semantics cannot be resolved until application
+  // Supply computeKind with kind of type argument, and it returns kind of application
+  | KForallPoset of computeKind : (SemPoset -> Kind) * Range
+  | KForallToset of computeKind : (SemToset -> Kind) * Range
+  | KForallSemilat of computeKind : (SemSemilat -> Kind) * Range
+
+/// If k is KProper, return true iff it holds a component representing the proper kind p
+let hasKind (k : Kind) (p : ProperKind) =
+    match k with
+    | KProper(_,toset,semilat,_) ->
+        match p with
+        | Poset ->
+            true
+        | Toset ->
+            toset.IsSome
+        | Semilattice ->
+            semilat.IsSome
+    | KOperator(_,_,_) ->
+        false
 
 let noPos : Position = {
     pos_fname = ""
@@ -122,12 +152,12 @@ type Ty =
   | IVar of ty : Ty * pos : (Position * Position)
   /// A type from the type environmnet
   | TyAlias of name : string * pos : (Position * Position)
-  /// Type abstraction
-  | ForallTy of varId : string * kind : ProperKind * body : Ty * pos : (Position * Position)
+  /// Type operator
+  | TyOp of varId : string * kind : ProperKind * body : Ty * pos : (Position * Position)
   // Monotone partiality monad
   | Partial of ty : Ty * pos : Range
   // Type abstraction application
-  | ForallTyApp of forall : Ty * arg : Ty * Range
+  | TyOpApp of op : Ty * arg : Ty * Range
 
   static member subst (a : Ty) (x : string) (s : Ty) : Ty =
     match a with
