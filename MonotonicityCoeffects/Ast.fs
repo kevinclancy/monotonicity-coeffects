@@ -300,7 +300,7 @@ type Ty =
 
 type Expr =
   | Int of int * Range
-  | Float of float * Range
+  | Bool of bool * Range
   | Forall of tyVar : string * kind : ProperKind * body : Expr * Range
   | ForallApp of forall : Expr * arg : Ty * Range
   | Abs of var : string * ty : Ty * body : Expr * Range
@@ -334,8 +334,8 @@ type Expr =
     match this with
     | Int(i,_) ->
         i.ToString()
-    | Float(f,_) ->
-        f.ToString()
+    | Bool(b,_) ->
+        b.ToString().ToLower()
     | Forall(tyVar,kind,body,_) ->
         "(" + "forall " + tyVar.ToString() + " : " + kind.ToString() + " . " + body.ToString() + ")" 
     | ForallApp(forall,arg,rng) ->
@@ -343,7 +343,7 @@ type Expr =
     | Abs(var,ty,body,_) ->
         "(fun " + var + " : " + ty.ToString() + " . " + body.ToString() + ")"
     | App(fn,arg,_) ->
-        "( " + fn.ToString() + " " + arg.ToString() + ")"
+        "(" + fn.ToString() + " " + arg.ToString() + ")"
     | Const(nm,_) ->
         nm
     | Var(nm,_) ->
@@ -354,7 +354,7 @@ type Expr =
         "(join " + ty.ToString() + " " + e1.ToString() + " " + e2.ToString() + ")"
     | Extract(targetTy,k,v,acc,dict,body,_) ->
         "let cons " + targetTy.ToString() + " " + k + " " + v + " " + acc + " = " + dict.ToString() + " in\n"
-          + body.ToString() + "end"
+          + body.ToString() + "\nend"
     | Cons(k,v,dict,_) ->
         "(cons " + k.ToString() + " " + v.ToString() + " " + dict.ToString() + ")" 
     | Fst(pair,_) ->

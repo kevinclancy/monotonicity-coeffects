@@ -39,12 +39,13 @@ ExprList : ExprList Expr { App($1,$2, parseState.ResultRange) }
 LetList : ID EQUAL Expr IN Expr END { Let($1,$3,$5, parseState.ResultRange) }
         | ID EQUAL Expr AND LetList { Let($1,$3,$5,parseState.ResultRange) }
 
-ParList : LPAREN ID COLON Ty RPAREN ParList { Abs($2,$4,$6,parseState.ResultRange) }
+ParList : LPAREN ID COLON TyList RPAREN ParList { Abs($2,$4,$6,parseState.ResultRange) }
         | LPAREN ID COLON ProperKindPrime RPAREN ParList { Forall($2,$4,$6, parseState.ResultRange) }
 		| Expr { $1 }
 
 Expr: INT                        { Int($1, parseState.ResultRange) }
-	| FLOAT                      { Float($1, parseState.ResultRange) }
+	| TRUE                      { Bool(true, parseState.ResultRange) }
+	| FALSE                     { Bool(false, parseState.ResultRange) }
 	| FUN ParList END { $2 }
 	| LET LetList { $2 }
 	| CONST { Const($1, parseState.ResultRange) }

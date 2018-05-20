@@ -119,7 +119,9 @@ let baseTyMap =
 
 let baseVEnv =
     Map<string, Ast.Ty>(
-        [("unit", TyId("Unit", noRange))]
+        [("plus", FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Nat", noRange), noRange), noRange))
+        // TODO: we need primitive unit values in syntax
+         ("unit", TyId("Unit", noRange))]
     )
 
 let tenv = { tyVarEnv = Map.empty ; tyBaseEnv = baseTyMap; tyAliasEnv = Map.empty }

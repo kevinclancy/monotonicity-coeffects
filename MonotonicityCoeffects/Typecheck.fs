@@ -44,6 +44,8 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             Result (TyId("Nat", noRange), Map.map (fun k v -> Coeffect.Ign) venv, P.PrimNatVal(n))
         else
             Error ["Negative integer constants not allowed", rng]
+    | Bool(b,rng) ->
+        Result (TyId("Bool", noRange), Map.map (fun k v -> Coeffect.Ign) venv, P.PrimBoolVal(b))
     | Forall(tyVarId, pk, body, rng) ->
         check {
             let tyVarEnv' = Map.add tyVarId pk tyVarEnv
@@ -151,11 +153,12 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let! dictTy, dictQ, pDictTerm = 
                 withError errorMsg rng (typeCheck ctxt dict)
             let! keyTy, valTy = 
-                match dictTy with
+                match Ty.normalize(ctxt.tenv.tyAliasEnv, dictTy) with
                 | Dictionary(domTy, codTy, _) ->
                     Result (domTy, codTy)
                 | _ ->
-                    Error [errorMsg + ": type " + dictTy.ToString() + " computed, but dictionary type expected",rng]
+                    let errorMsg' = ": dictionary expected for type of " + dict.ToString() + ", but " + dictTy.ToString() + " computed" 
+                    Error [errorMsg + errorMsg',rng]
             let! pKeyTy, pKeyComp = kCheckToset ctxt.tenv keyTy
             let! pValTy = kCheckProset ctxt.tenv valTy
             let venv' = venv.Add(key, keyTy)
@@ -164,11 +167,11 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let! bodyTy, bodyQ, pBodyTerm = 
                 withError errorMsg rng (typeCheck { ctxt with venv = venv''' } body)
             do! Ty.IsSubtype bodyTy targetTy
-            do! if not (bodyQ.[value] <= CoeffectMonotone) then
+            do! if (Coeffect.LessThan bodyQ.[value] CoeffectMonotone) then
                     Result ()
                 else
                     Error ["Expected monotone usage of " + value + " but found " + bodyQ.[value].ToString(), rng]
-            do! if not (bodyQ.[acc] <= CoeffectMonotone) then
+            do! if (Coeffect.LessThan bodyQ.[acc] CoeffectMonotone) then
                     Result ()
                 else
                     Error ["Expected monotone usage of " + acc + " but found " + bodyQ.[value].ToString(), rng]            
@@ -194,11 +197,12 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let! valTy, valQ, pValTerm = withError errorMsg rng (typeCheck ctxt e2)
             let! dictTy, dictQ, pDictTerm = withError errorMsg rng (typeCheck ctxt e3)
             let! dKeyTy, dValTy = 
-                match dictTy with
+                match Ty.normalize(ctxt.tenv.tyAliasEnv, dictTy) with
                 | Dictionary(domTy, codTy,_) ->
                     Result (domTy, codTy)
                 | _ ->
-                    Error [errorMsg + ": dictionary type expected, but got " + dictTy.ToString(),rng]
+                    let errorMsg' = ": type of " + e3.ToString() + " expected to be dictionary type, but computed " + dictTy.ToString()
+                    Error [errorMsg + errorMsg',rng]
             do! withError 
                     (errorMsg + ": key type " + keyTy.ToString() + " is not a subtype of dictionary domain type " + dKeyTy.ToString()) 
                     rng 

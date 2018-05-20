@@ -1,5 +1,5 @@
 ﻿types
-  set = (Forall x : TOSET . x |> Bool); 
+  set = (TypeFun x : TOSET . x |> Bool); 
 in
 
 let monoIf = 
@@ -8,6 +8,16 @@ let monoIf =
 		res
       end
   end
+and setAdd =
+	fun (elemTy : TOSET) (elem : elemTy) (s : set elemTy)
+		cons elem true s
+	end
+and setCount =
+	fun (elemTy : TOSET) (s : set elemTy)
+		let cons Nat key val acc = s in
+			(plus acc 1)
+		end
+	end
 in
-  monoIf
+	setAdd
 end
