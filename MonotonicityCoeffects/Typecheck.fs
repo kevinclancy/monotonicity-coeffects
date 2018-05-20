@@ -46,7 +46,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             Error ["Negative integer constants not allowed", rng]
     | Forall(tyVarId, pk, body, rng) ->
         check {
-            let tyVarEnv' = Map.add tyVarId kind tyVarEnv
+            let tyVarEnv' = Map.add tyVarId pk tyVarEnv
             let tenv' = { tenv with tyVarEnv = tyVarEnv' }
             let! ty, qs, term = withError (errorMsg + ": body is not well-typed") rng (typeCheck { ctxt with tenv = tenv' } body)
             let term' = 
@@ -62,17 +62,17 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                             P.Abs("$" + tyVarId + "_join", P.Fun(pTyVar, P.Fun(pTyVar, pTyVar)), term)))
             
             // TODO: this should be a forall type rather than a tyOp
-            return (TyOp(tyVarId, pk, ty, noRange), qs, term')
+            return (ForallTy(tyVarId, pk, ty, noRange), qs, term')
         }
     | ForallApp(forallExpr, tyArg, rng) ->
         check {
             let! tyForall, qsForall, termForall = withError (errorMsg + ": left-hand side not well-typed") rng (typeCheck ctxt forallExpr)
             let! id, body, pkExpected = 
                 match tyForall with
-                | TyOp(id,pk,body,_) ->
+                | ForallTy(id,pk,body,_) ->
                     Result (id, body, pk) 
                 | _ ->
-                    Error [errorMsg + ": " + tyForall.ToString() + " is not a type abstraction", rng]
+                    Error [errorMsg + ": " + tyForall.ToString() + " is not a forall type", rng]
             let ty' = Ty.subst tyArg id body
             match pkExpected with
             | Poset ->
@@ -163,7 +163,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let venv''' = venv''.Add(acc, targetTy)
             let! bodyTy, bodyQ, pBodyTerm = 
                 withError errorMsg rng (typeCheck { ctxt with venv = venv''' } body)
-            do! Type.IsSubtype bodyTy targetTy
+            do! Ty.IsSubtype bodyTy targetTy
             do! if not (bodyQ.[value] <= CoeffectMonotone) then
                     Result ()
                 else
@@ -198,13 +198,13 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 | Dictionary(domTy, codTy,_) ->
                     Result (domTy, codTy)
                 | _ ->
-                    Error [errorMsg + ": dictionary type expected, but got " + wrongTy.ToString(),rng]
+                    Error [errorMsg + ": dictionary type expected, but got " + dictTy.ToString(),rng]
             do! withError 
-                    (errorMsg + ": key type " + keyTy.ToString() + " is not a subtype of dictionary domain type " + domTy.ToString()) 
+                    (errorMsg + ": key type " + keyTy.ToString() + " is not a subtype of dictionary domain type " + dKeyTy.ToString()) 
                     rng 
                     (Ty.IsSubtype keyTy dKeyTy)
             do! withError 
-                    (errorMsg + ": value " + e2.ToString() + " is not a subtype of dictionary codomain " + codTy.ToString())
+                    (errorMsg + ": value " + e2.ToString() + " is not a subtype of dictionary codomain " + dValTy.ToString())
                     rng
                     (Ty.IsSubtype valTy dValTy)
             let resQ = contr (contr (comp CoeffectAny keyQ) valQ) dictQ
@@ -269,7 +269,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
     | Inr(lty, rty, expr, rng) ->
         check {
             let! exprTy, exprQ, pExprTerm = withError errorMsg rng (typeCheck ctxt expr)
-            do! withError errorMsg rng (Ty.IsSubtype exprTy lry)
+            do! withError errorMsg rng (Ty.IsSubtype exprTy rty)
             return Sum(lty,rty,noRange), exprQ, P.In2(pExprTerm)
         }
     | Cap(q, e, rng) ->
@@ -285,10 +285,10 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 match capsuleTy with
                 | Capsule(contentsTy, s, _) when s = q ->
                     Result contentsTy
-                | Capsule(_,_,_) ->
+                | Capsule(_,s,_) ->
                     Error [errorMsg + ": expected a capsule " + q.ToString() + " expression in the binding position, but got a capsule " + s.ToString(), rng]
                 | _ ->
-                    Error [errorMsg + ": expected an expression of capsule type in the binding position, but got an expression of type " + bindTy.ToString(), rng]
+                    Error [errorMsg + ": expected an expression of capsule type in the binding position, but got an expression of type " + capsuleTy.ToString(), rng]
             let! pContentsTy = kCheckProset ctxt.tenv contentsTy
             let venv' = venv.Add(varId, contentsTy)
             let! bodyTy, bodyQ, bodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } body)
@@ -297,7 +297,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 | true ->
                     Result ()
                 | false ->
-                    Error [(errorMsg + ": " + varId + " has coeffect " + r.ToString() + " but coeffect more restrictive than " 
+                    Error [(errorMsg + ": " + varId + " has coeffect " + bodyQ.[varId].ToString() + " but coeffect more restrictive than " 
                            + q.ToString() + " expected", rng)]
             return bodyTy, contr capsuleQ (bodyQ.Remove(varId)), P.App(P.Abs(varId, pContentsTy, bodyTerm), capsuleTerm)  
         }
@@ -317,10 +317,10 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 | IVar(tyContents,_) ->
                     Result tyContents
                 | _ ->
-                    Error [errorMsg + ": " + expr.ToString() + " expected to have ivar type, but type " + bindTy.ToString() + " was computed.", rng]
+                    Error [errorMsg + ": " + expr.ToString() + " expected to have ivar type, but type " + ivarTy.ToString() + " was computed.", rng]
             let! pTyContents = kCheckProset ctxt.tenv tyContents
             let venv' = venv.Add(varId, tyContents)
-            let! bodyTy, bodyQ, pBodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } ) body)
+            let! bodyTy, bodyQ, pBodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } body)
             let! pBodyTy, pBodyBot, pBodyJoin = kCheckSemilattice ctxt.tenv bodyTy
             let pIvarTy = P.List pTyContents
             let resTerm = 
@@ -352,8 +352,8 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 | Partial(bindTy,_) ->
                     Result bindTy
                 | _ ->
-                    Failure [errorMsg + ": monadic let expected a partial computation in body position, but instead got " + partialCompTy.ToString(),rng]
-            let pBindTy = kCheckProset ctxt.tenv bindTy
+                    Error [errorMsg + ": monadic let expected a partial computation in body position, but instead got " + partialCompTy.ToString(),rng]
+            let! pBindTy = kCheckProset ctxt.tenv bindTy
             let venv' = venv.Add(varId, bindTy)
             let! bodyTy, bodyQ, pBodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } bodyExpr)
             do!
@@ -361,7 +361,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 | true ->
                     Result ()
                 | false ->
-                    Error ["Expected monotone (+) usage of " + varId + " but computed " + bodyQ.[varId].ToString()]
+                    Error ["Expected monotone (+) usage of " + varId + " but computed " + bodyQ.[varId].ToString(), rng]
             let pBodyFun = P.Abs(varId, pBindTy, pBodyTerm)
             let resTerm = P.SumCase(
                             pPartialCompTerm, 
@@ -379,26 +379,21 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
 // type ValueEnvironment = Map<string, Ty>
 // type Context = { tenv : TypeEnvironment ; venv : ValueEnvironment }
 
-let progCheck (ctxt : Context) (p : Prog) = 
+let progCheck (ctxt : Context) (p : Prog) : Check<Ty * CoeffectMap> = 
     let foldAlias (acc : Check<TypeEnvironment>) (n : string) (ty : Ty) =
         match acc with
         | Error(stack) ->
             Error(stack)
         | Result(tenv) ->
             match kSynth tenv ty with
-            | KindSynthResult.Success(k) ->
-                Result { tenv with tyVarEnv = tenv.tyVarEnv.Add(n,k) }
-            | KindSynthResult.Failure(stack) ->
+            | Result k ->
+                Result { tenv with tyAliasEnv = tenv.tyAliasEnv.Add(n,ty) }
+            | Error(stack) ->
                 Error(stack)
 
-    let tenvCheck = check { return ctxt.tenv }
-    let tenvComp = Map.fold foldAlias tenvCheck p.typeAliases
-    match tenvComp with
-    | Error(stack) ->
-        Error(stack)
-    | Result(tenv) ->
-        match typeCheck { ctxt with tenv = tenv } p.body with
-        | Success(ty,R) ->
-            Result(ty,R)
-        | Failure(stack) ->
-            Error(stack)
+    check {
+        let tenvCheck = check { return ctxt.tenv }
+        let! tenv = Map.fold foldAlias tenvCheck p.typeAliases
+        let! ty,R,pTerm = typeCheck { ctxt with tenv = tenv } p.body
+        return ty,R
+    }

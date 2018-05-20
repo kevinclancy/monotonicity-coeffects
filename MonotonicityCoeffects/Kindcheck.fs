@@ -102,22 +102,24 @@ type Ty with
             None
     | TyOp(varId,kind,body,rng) ->
         None
+    | ForallTy(varId, kind, body, rng) ->
+        None
     | Partial(tyContents, rng) ->
-        Some(Partial(Ty.subst tyContents x s, rng))
-    | TyApp(forallTy, argTy, rng) ->
-        match Ty.reduce aliasEnv forallTy with
+        None
+    | TyApp(tyOp, argTy, rng) ->
+        match Ty.reduce aliasEnv tyOp with
         | Some(forallTy') ->
             Some(TyApp(forallTy', argTy, rng))
         | None ->
             match Ty.reduce aliasEnv argTy with
             | Some(argTy') ->
-                Some(TyApp(forallTy,argTy',rng))
+                Some(TyApp(tyOp,argTy',rng))
             | None ->
-                match forallTy with
+                match tyOp with
                 | TyOp(id,_,body,_) ->
                     Some(Ty.subst argTy id body)
                 | _ ->
-                    failwith "this program 'went wrong'" 
+                    failwith "this type 'went wrong'. oops." 
 
 type Range = Position * Position
 
@@ -250,6 +252,8 @@ let rec kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Check<SemPoset * SemTos
         Error [(errorMsg + ": no ivar type is considered a toset", rng)]
     | TyOp(varId, kind, body, rng) ->
         Error [(errorMsg + ": no type operator is totally ordered", rng)]
+    | ForallTy(varId, kind, body, rng) ->
+        Error [(errorMsg + ": forall types do not denote tosets",rng)]
     | Partial(ty,rng) ->
         Error [(errorMsg + ": no type in the partiality monad is totally ordered",rng)]
     | TyApp(tyOp, tyArg, rng) ->
@@ -339,6 +343,8 @@ and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term *
         }    
     | TyOp(_,_,_,rng) ->
         Error [(errorMsg + ": type operators do not denote semilattices", rng)]
+    | ForallTy(varId, kind, body, rng) ->
+        Error [(errorMsg + ": forall types do not denote semilattices",rng)]
     | Partial(tyContents,rng) ->
         check {
             let! (ty, bot, join) = withError (errorMsg + ": [ty] is only a semilattice if ty is a semilattice") rng (kCheckSemilattice tenv tyContents)
@@ -422,7 +428,13 @@ and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty> =
             return pTyContents
         }
     | TyOp(varId, kind, body, rng) ->
-        Error [(errorMsg + ": type operators do not denote prosets",rng)]
+        Error [(errorMsg + ": type operators do not denote posets",rng)]
+    | ForallTy(varId, kind, body, rng) ->
+        check {
+            let tenv' = { tenv with tyVarEnv = tenv.tyVarEnv.Add(varId,kind) }
+            let! pBodyTy = withError errorMsg rng (kCheckProset tenv' body)
+            return P.ForallTy("$" + varId, pBodyTy)
+        }
     | Partial(tyContents,rng) ->
         check {
             let! pTyContents = withError (errorMsg + ": underlying type is not a poset") rng (kCheckProset tenv tyContents)
@@ -563,15 +575,20 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
         // of forall types until they are applied. However, we will still need to build some stub semantics 
         // to leverage other code.
         check {
-            let kDom = 
-                match kind with
-                | Poset ->
-                    KProper(P.Unit, None, None, noRange)
-                | Semilattice ->
-                    KProper(P.Unit, None, Some({ bot = P.PrimUnitVal ; join = P.PrimUnitVal }), noRange)
-                | Toset ->
-                    KProper(P.Unit, Some(P.PrimUnitVal), None, noRange)
-            let! kCod = withError (errorMsg + ": body not well-formed") rng (kSynth {tenv with tyVarEnv = tyVarEnv.Add(varId,kDom)} body)
+            //let kDom = 
+            //    match kind with
+            //    | Poset ->
+            //        KProper(P.Unit, None, None, noRange)
+            //    | Semilattice ->
+            //        KProper(P.Unit, None, Some({ bot = P.PrimUnitVal ; join = P.PrimUnitVal }), noRange)
+            //    | Toset ->
+            //        KProper(P.Unit, Some(P.PrimUnitVal), None, noRange)
+            let! kCod = withError (errorMsg + ": body not well-formed") rng (kSynth {tenv with tyVarEnv = tyVarEnv.Add(varId,kind)} body)
+            return KOperator(kind,kCod,noRange)
+        }
+    | ForallTy(varId, kind, body, rng) ->
+        check {
+            let! kCod = withError (errorMsg + ": body not well-formed") rng (kSynth {tenv with tyVarEnv = tyVarEnv.Add(varId,kind)} body)
             return KOperator(kind,kCod,noRange)
         }
     | Partial(tyContents, rng) ->

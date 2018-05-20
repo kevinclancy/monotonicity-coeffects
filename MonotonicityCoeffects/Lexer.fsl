@@ -29,11 +29,12 @@ rule token = parse
 | "fun"          { FUN }
 | "forall"       { FORALL }
 | "Forall"       { BIGFORALL }
+| "TypeFun"      { TYPEFUN }
 | ":"            { COLON }
 | ";"            { SEMICOLON }
 | "types"        { TYPES }
 | "TOSET"        { TOSET }
-| "PROSET"       { PROSET }
+| "POSET"        { POSET }
 | "SEMILATTICE"  { SEMILATTICE }
 | "{"            { LBRACK }
 | "}"            { RBRACK }

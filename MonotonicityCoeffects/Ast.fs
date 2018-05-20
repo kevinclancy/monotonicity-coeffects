@@ -150,6 +150,8 @@ type Ty =
   | IVar of ty : Ty * pos : (Position * Position)
   /// Type operator
   | TyOp of varId : string * kind : ProperKind * body : Ty * pos : (Position * Position)
+  /// Universally quantified type
+  | ForallTy of varId : string * kind : ProperKind * body : Ty * pos : Range
   // Monotone partiality monad
   | Partial of ty : Ty * pos : Range
   // Type abstraction application
@@ -288,6 +290,8 @@ type Ty =
         | IVar(tyContents,_) ->
             "!" + tyContents.ToString() + "!"
         | TyOp(varId, kind, body,_) ->
+            "(TypeFun (" + varId + " : " + kind.ToString() + "). " + body.ToString() + ")"
+        | ForallTy(varId, kind, body,_) ->
             "(Forall (" + varId + " : " + kind.ToString() + "). " + body.ToString() + ")"
         | Partial(ty,_) ->
             "[" + ty.ToString() + "]"

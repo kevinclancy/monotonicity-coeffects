@@ -171,7 +171,7 @@ let rec tySubstTerm (ty : Ty) (x : string) (t : Term) =
     | SumCase(scrut, lCase, rCase) ->
         SumCase(tySubstTerm ty x scrut, tySubstTerm ty x lCase, tySubstTerm ty x rCase)
     | LetRec(funName, parName, domTy, codTy, body) ->
-        LetRec(funName, parName, domTy, codTy, tySubstTerm s x body)
+        LetRec(funName, parName, domTy, codTy, tySubstTerm ty x body)
 
 let rec step (t : Term) : Option<Term> =
     match t with
