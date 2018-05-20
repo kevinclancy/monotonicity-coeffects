@@ -2,6 +2,7 @@
 
 open Microsoft.FSharp.Text.Lexing
 open System
+open CheckComputation
 
 type Range = Position * Position
 
@@ -186,111 +187,89 @@ type Ty =
     | TyApp(op, arg, rng) ->
         TyApp(Ty.subst a x op, Ty.subst a x arg, rng)
 
-  static member IsEquiv (a : Ty) (b : Ty) : SubtypeResult =
+  static member IsEquiv (a : Ty) (b : Ty) : Check<Unit> =
     let errorMsg = "Type " + a.ToString() + " is not equivalent to " + b.ToString()
-    match Ty.IsSubtype a b with
-    | Success ->
-        match Ty.IsSubtype b a with
-        | Success ->
-            Success
-        | Failure(stack) ->
-            Failure(errorMsg :: stack)
-    | Failure(stack) ->
-        Failure(errorMsg :: stack)
+    check {
+        do! withError errorMsg noRange (Ty.IsSubtype a b)
+        do! withError errorMsg noRange (Ty.IsSubtype b a)
+        return ()
+    }
 
-  static member IsSubtype (a : Ty) (b : Ty) : SubtypeResult =
+  static member IsSubtype (a : Ty) (b : Ty) : Check<Unit> =
     let errorMsg = a.ToString() + " is not a subtype of " + b.ToString()
     match (a,b) with
     | TyId(aName,_), TyId(bName,_) ->
         match aName = bName with
         | true -> 
-            Success
+            Result ()
         | false ->
-            Failure ["Type " + aName + " is not a subtype of " + bName]
+            Error ["Type " + aName + " is not a subtype of " + bName, noRange]
     | FunTy(aDom,aq,aCod,_), FunTy(bDom, bq, bCod, _) ->
-        match Ty.IsSubtype bDom aDom with
-        | Success ->
-            match bq <= aq with
-            | true ->
-                match Ty.IsSubtype aCod bCod with
-                | Success ->
-                    Success
-                | Failure(stack) ->
-                    Failure(errorMsg + ": subtyping doesn't hold among domain types" :: stack)
-            | false ->
-                Failure [errorMsg + ": " + aq.ToString() + " is not a stronger capability than " + bq.ToString()]
-        | Failure(stack) ->
-            Failure(errorMsg + ": subtyping doesn't hold among codomain types" :: stack)
+        check {
+            let! _ = withError ("subtyping doesn't hold among domain types") noRange (Ty.IsSubtype bDom aDom)
+            let! _ = withError ("subtyping doesn't hold among codomain types") noRange (Ty.IsSubtype aCod bCod)
+            let! _ =
+                match bq <= aq with
+                | true ->
+                    Result ()
+                | false ->
+                    Error [errorMsg + ": " + aq.ToString() + " is not a stronger capability than " + bq.ToString(), noRange]
+            return ()
+        }
     | Dictionary(aDom,aCod,_), Dictionary(bDom,bCod,_) ->
         // should be able to relax this to contravariant domain, covariant codomain
-        match Ty.IsEquiv aDom bDom with
-        | Success ->
-            match Ty.IsEquiv aCod bCod with
-            | Success ->
-                Success
-            | Failure(stack) ->
-                Failure(errorMsg :: stack)
-        | Failure(stack) ->
-            Failure(errorMsg :: stack)
+        check {
+            let! _ = withError ("domain types not equal") noRange (Ty.IsEquiv aDom bDom)
+            let! _ = withError ("codomain types not equal") noRange (Ty.IsEquiv aCod bCod)
+            return ()
+        }
     | Capsule(aContents,aq,_), Capsule(bContents,bq,_) ->
         match bq <= aq with
         | false ->
-            Failure [errorMsg + ": " + aq.ToString() + " is not as strong as " + bq.ToString()]
+            Error [errorMsg + ": " + aq.ToString() + " is not as strong as " + bq.ToString(), noRange]
         | true ->
-            match Ty.IsSubtype aContents bContents with
-            | Failure(stack) ->
-                Failure(errorMsg + ": subtyping among content types does not hold" :: stack)
-            | Success ->
-                Success
+            check {
+                let! _ = withError (errorMsg + ": subtyping among content types does not hold") noRange (Ty.IsSubtype aContents bContents)
+                return ()
+            }
     | Prod(aL,aR,_), Prod(bL,bR,_) ->
-        match Ty.IsSubtype aL bL with
-        | Success ->
-            match Ty.IsSubtype aR bR with
-            | Success ->
-                Success
-            | Failure(stack) ->
-                Failure(errorMsg + ": left component" :: stack)
-        | Failure(stack) ->
-            Failure(errorMsg + ": right component" :: stack)
+        check {
+            let! _ = withError (errorMsg + ": left component") noRange (Ty.IsSubtype aL bL)
+            let! _ = withError (errorMsg + ": right component") noRange (Ty.IsSubtype aR bR)
+            return ()
+        }
     | Sum(aL,aR,_), Sum(bL,bR,_) ->
-        match Ty.IsSubtype aL bL with
-        | Success ->
-            match Ty.IsSubtype aR bR with
-            | Success ->
-                Success
-            | Failure(stack) ->
-                Failure(errorMsg + ": left component" :: stack)
-        | Failure(stack) ->
-            Failure(errorMsg + ": right component" :: stack)        
+        check {
+            let! _ = withError (errorMsg + ": left component") noRange (Ty.IsSubtype aL bL)
+            let! _ = withError (errorMsg + ": right component") noRange (Ty.IsSubtype aR bR)
+            return ()
+        }    
     | IVar(aContents, _), IVar(bContents, _) ->
-        match Ty.IsSubtype aContents bContents with
-        | Success ->
-            Success
-        | Failure(stack) ->
-            Failure(errorMsg :: stack)
+        check {
+            let! _ = withError errorMsg noRange (Ty.IsSubtype aContents bContents)
+            return ()
+        }
     /// Type abstraction
     | TyOp(aId, aKind, aBody, _), TyOp(bId, bKind, bBody, _) ->
         match aId = bId with
         | true ->
             match aKind = bKind with
             | true ->
-                match Ty.IsSubtype aBody bBody with
-                | Success ->
-                    Success
-                | Failure(stack) ->
-                    Failure(errorMsg :: stack)
+                check {
+                    let! _ = withError errorMsg noRange (Ty.IsSubtype aBody bBody)
+                    return ()
+                }
             | false ->
-                Failure [errorMsg + ": kind " + aKind.ToString() + " distinct from " + bKind.ToString()]
+                Error [errorMsg + ": kind " + aKind.ToString() + " distinct from " + bKind.ToString(), noRange]
         | false ->
-            Failure [errorMsg + ": bound variable " + aId + " distinct from " + bId]
+            Error [errorMsg + ": bound variable " + aId + " distinct from " + bId, noRange]
     | Partial(aTy,_), Partial(bTy,_) ->
-        match Ty.IsSubtype aTy bTy with
-        | Success ->
-            Success
-        | Failure(stack) ->
-            Failure(errorMsg :: stack)
+        check {
+            let! _ = withError errorMsg noRange (Ty.IsSubtype aTy bTy)
+            return ()
+        }
     | _ ->
-        Failure [errorMsg]
+        Error [errorMsg, noRange]
 
   override this.ToString() =
         match this with

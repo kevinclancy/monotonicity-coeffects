@@ -1,12 +1,19 @@
 ﻿module Typecheck
 
+open PCF
 open Ast
 open Kindcheck
 open System
 open CheckComputation
+open System.Security.Cryptography
+open System.Reflection.Metadata
+
+module P = PCF
 
 type ValueEnvironment = Map<string, Ty>
 type Context = { tenv : TypeEnvironment ; venv : ValueEnvironment }
+
+type CoeffectMap = Map<string, Coeffect>
 
 type typeCheckResult =
     | Success of Ty * Map<string, Coeffect>
@@ -27,305 +34,346 @@ let contr (a : Map<string, Coeffect>) (b : Map<string, Coeffect>) : Map<string, 
 let comp (q : Coeffect) (a : Map<string, Coeffect>) : Map<string, Coeffect> =
     Map.map (fun k r -> (q %% r)) a
     
-let rec typeCheck (ctxt : Context) (expr : Expr) =
+let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Term> =
     let tenv,venv = ctxt.tenv, ctxt.venv
     let tyVarEnv, tyBaseEnv = tenv.tyVarEnv, tenv.tyBaseEnv
     let errorMsg = "Expression " + expr.ToString() + " not well-typed"
     match expr with
     | Int(n, rng) ->
         if n >= 0 then
-            Success (BaseTy("Nat", noRange), Map.map (fun k v -> Coeffect.Ign) venv)
+            Result (TyId("Nat", noRange), Map.map (fun k v -> Coeffect.Ign) venv, P.PrimNatVal(n))
         else
-            Failure(["Negative integer constants not allowed", rng])
-    | Forall(tyVarId, kind, body, rng) ->
-        let tyVarEnv' = Map.add tyVarId (KProper(Set [kind], noRange)) tyVarEnv
-        let tenv' = { tenv with tyVarEnv = tyVarEnv' }
-        match typeCheck { ctxt with tenv = tenv' } body with
-        | Success(ty, coeffect) ->
-            Success(ForallTy(tyVarId, kind, ty, noRange), coeffect)
-        | Failure(stack) ->
-            Failure((errorMsg + ": body not well-typed", rng) :: stack)
-    | ForallApp(forallExpr, tyArg, rng) ->
-        match typeCheck ctxt forallExpr with
-        | Success(ForallTy(id,kind,tyBody,_), R) ->
-            let kCheckResult =
-                match kind with
+            Error ["Negative integer constants not allowed", rng]
+    | Forall(tyVarId, pk, body, rng) ->
+        check {
+            let tyVarEnv' = Map.add tyVarId kind tyVarEnv
+            let tenv' = { tenv with tyVarEnv = tyVarEnv' }
+            let! ty, qs, term = withError (errorMsg + ": body is not well-typed") rng (typeCheck { ctxt with tenv = tenv' } body)
+            let term' = 
+                let pTyVar = P.TyVar("$" + tyVarId)
+                match pk with
+                | Poset ->
+                    P.Forall("$" + tyVarId, term)
                 | Toset ->
-                    kCheckToset ctxt.tenv tyArg
+                    P.Forall("$" + tyVarId, P.Abs("$" + tyVarId + "_comp", P.Fun(pTyVar, P.Fun(pTyVar, P.BB)), term))
                 | Semilattice ->
-                    kCheckSemilattice ctxt.tenv tyArg
-                | Proset ->
-                    kCheckProset ctxt.tenv tyArg
-            match kCheckResult with
-            | Some(stack) ->
-                Failure((errorMsg + ": " + tyArg.ToString() + " does not have expected kind " + kind.ToString(),rng) :: stack)
-            | None ->
-                Success(Ty.subst tyBody id tyArg, R)
-        | Success(tyForall, _) ->
-            Failure [errorMsg + ": " + tyForall.ToString() + " is not a type abstraction", rng]
-        | Failure(stack) ->
-            Failure((errorMsg + ": body not well-typed", rng) :: stack)
+                     P.Forall("$" + tyVarId,
+                        P.Abs("$" + tyVarId + "_bot", pTyVar, 
+                            P.Abs("$" + tyVarId + "_join", P.Fun(pTyVar, P.Fun(pTyVar, pTyVar)), term)))
+            
+            // TODO: this should be a forall type rather than a tyOp
+            return (TyOp(tyVarId, pk, ty, noRange), qs, term')
+        }
+    | ForallApp(forallExpr, tyArg, rng) ->
+        check {
+            let! tyForall, qsForall, termForall = withError (errorMsg + ": left-hand side not well-typed") rng (typeCheck ctxt forallExpr)
+            let! id, body, pkExpected = 
+                match tyForall with
+                | TyOp(id,pk,body,_) ->
+                    Result (id, body, pk) 
+                | _ ->
+                    Error [errorMsg + ": " + tyForall.ToString() + " is not a type abstraction", rng]
+            let ty' = Ty.subst tyArg id body
+            match pkExpected with
+            | Poset ->
+                let! pTy = withError errorMsg rng (kCheckProset ctxt.tenv tyArg)
+                let term' = P.TyApp(termForall, pTy)
+                return (ty', qsForall,  term')
+            | Toset ->
+                let! pTy, pComp = withError errorMsg rng (kCheckToset ctxt.tenv tyArg)
+                let term' = P.TyApp(termForall, pTy)
+                let term'' = P.App(term', pComp)
+                return (ty', qsForall, term'')
+            | Semilattice ->
+                let! pTy, pBot, pJoin = withError errorMsg rng (kCheckSemilattice ctxt.tenv tyArg)
+                let term' = P.TyApp(termForall, pTy)
+                let term'' = P.App(term', pBot)
+                let term''' = P.App(term'', pJoin)
+                return (ty', qsForall, term''')
+        }
     | Abs(var, varTy, body, rng) ->
-        let venv' = Map.add var varTy venv
-        match typeCheck { ctxt with venv = venv' } body with
-        | Success(tyBody, coeffect) ->
-            match coeffect.TryFind var with
+        check {
+            let! kVar = withError ("type annotation " + varTy.ToString() + " is not well-kinded") rng (kSynth ctxt.tenv varTy)
+            let! pTyVar,_,_ = getProper "argument type" kVar 
+            let venv' = Map.add var varTy venv
+            let! ty,qs,term = withError (errorMsg + ": body not well-typed") rng (typeCheck { ctxt with venv = venv' } body)
+            match qs.TryFind(var) with // None case unreachable
             | Some(q) ->
-                Success(FunTy(varTy, q, tyBody, noRange), coeffect.Remove var)
-            | None ->
-                failwith "unreachable"
-        | Failure(stack) ->
-            Failure( (errorMsg + ": body not well-typed", rng) :: stack )
+                let ty' = FunTy(varTy, q, ty, noRange)
+                let qs' = qs.Remove(var)
+                let term' = P.Abs(var, pTyVar, term)
+                return ty', qs', term'
+        }
     | App(fn,arg,rng) ->
-        match typeCheck ctxt fn with
-        | Success(FunTy(domTy,q,codTy,rng), R) ->
-            match typeCheck ctxt arg with
-            | Success(argTy, S) -> //todo: we need to make a subtyping relation and overload Ty's = in terms of it
-                match Ty.IsSubtype argTy domTy with
-                | SubtypeResult.Success ->
-                    Success(codTy,contr R (comp q S))
-                | SubtypeResult.Failure(stack) ->
-                    Failure((errorMsg,rng) :: (List.map (fun msg -> (msg,noRange)) stack))
-            | Failure(stack) ->
-                Failure( (errorMsg + ": argument ill-typed", rng) :: stack)
-        | Success(ty, R) ->
-            Failure [errorMsg + ": " + fn.ToString() + " has type " + ty.ToString() + " and cannot be applied ",rng]
-        | Failure(stack) ->
-            Failure( (errorMsg + ": function ill-typed", rng) :: stack )
-    // | Const(name,rng) -> there is no reason to have constants - we are just going to add entries to the base venv instead
+        check {
+            let! tyFun, qsFun, termFun = withError (errorMsg + ": function position ill-typed") rng (typeCheck ctxt fn)
+            let! tyArg, qsArg, termArg = withError (errorMsg + ": argument position ill-typed") rng (typeCheck ctxt arg)
+            let! codTy, qs, term =
+                match tyFun with
+                | FunTy(domTy, q, codTy, rng) ->
+                    check {
+                        do! withError errorMsg rng (Ty.IsSubtype tyArg domTy)
+                        let qs = contr qsFun (comp q qsArg)
+                        let term = P.App(termFun, termArg)
+                        return (codTy, qs, term)
+                    }
+                | _ ->
+                    Error [errorMsg + ": " + fn.ToString() + " has type " + tyFun.ToString() + " and cannot be applied ",rng]
+            return codTy, qs, term
+        }
     | Var(name,rng) ->
         match venv.TryFind name with
         | Some(ty) ->
-            Success(ty, Map.map (fun k v -> if k = name then Coeffect.Use else Coeffect.Ign) venv)
+            let nameOnlyMono = Map.map (fun k v -> if k = name then Coeffect.Use else Coeffect.Ign) venv
+            Result (ty, nameOnlyMono, P.Var(name)) 
         | None ->
-            Failure [errorMsg + ": identifier " + name.ToString() + "undeclared",rng]
+            Error [errorMsg + ": identifier " + name.ToString() + "undeclared",rng]
     | Bot(ty,rng) ->
-        match kCheckSemilattice tenv ty with
-        | None ->
-            Success(ty, Map.map (fun k v -> Coeffect.Ign) venv)
-        | Some(stack) ->
-            Failure((errorMsg,rng) :: stack)
+        check {
+            let! _, pBot, _ = withError errorMsg rng (kCheckSemilattice tenv ty)
+            let qsAllIgn = Map.map (fun k v -> Coeffect.Ign) venv
+            return ty, qsAllIgn, pBot
+        }
     | Join(ty, e1, e2, rng) ->
-        match kCheckSemilattice tenv ty with
-        | None ->
-            match typeCheck ctxt e1 with
-            | Success(ty1, R1) ->
-                match typeCheck ctxt e2 with
-                | Success(ty1, R2) ->
-                    Success(ty,contr R1 R2)
-                | Failure(stack) ->
-                    Failure((errorMsg,rng) :: stack)
-            | Failure(stack) ->
-                Failure((errorMsg,rng) :: stack)
-        | Some(stack) ->
-            Failure((errorMsg,rng) :: stack)
+        check {
+            let! _, _, pJoin = withError errorMsg rng (kCheckSemilattice tenv ty)
+            let! ty1, qs1, pTerm1 = withError errorMsg rng (typeCheck ctxt e1)
+            let! ty2, qs2, pTerm2 = withError errorMsg rng (typeCheck ctxt e2)
+            do! withError errorMsg rng (Ty.IsEquiv ty1 ty)
+            do! withError errorMsg rng (Ty.IsEquiv ty2 ty)
+            let term = P.App(P.App(pJoin, pTerm1), pTerm2)
+            return ty, contr qs1 qs2, term
+        }
     | Extract(targetTy, key, value, acc, dict, body, rng) ->
-        match kCheckSemilattice tenv targetTy with
-        | Some(stack) ->
-            Failure((errorMsg,rng) :: stack)
-        | None ->
-            match typeCheck ctxt dict with
-            | Success( Dictionary(domTy,codTy,_), dictR) ->
-                let venv' = venv.Add(key, Capsule(domTy, CoeffectAny,noRange))
-                let venv'' = venv'.Add(value, codTy)
-                let venv''' = venv''.Add(acc, targetTy)
-                match typeCheck { ctxt with venv = venv''' } body with
-                | Success(bodyTy, bodyR) ->
-                    match Ty.IsSubtype bodyTy targetTy with
-                    | SubtypeResult.Success ->
-                        Success(targetTy, contr (bodyR.Remove(key).Remove(value).Remove(acc)) dictR)
-                    | SubtypeResult.Failure(stack) ->
-                        Failure((errorMsg + ": body type " + bodyTy.ToString() + " is not a subtype of target type " + targetTy.ToString(),rng) :: List.map (fun k -> k,noRange) stack)
-                | Failure(stack) ->
-                    Failure(stack)
-            | Success(wrongTy, _) ->
-                Failure [errorMsg + ": type " + wrongTy.ToString() + " computed, but dictionary type expected",rng]
-            | Failure(stack) ->
-                Failure((errorMsg,rng) :: stack)
+        check {
+            let! pTargetTy, pTargetBot, pTargetJoin = 
+                withError errorMsg rng (kCheckSemilattice tenv targetTy)
+            let! dictTy, dictQ, pDictTerm = 
+                withError errorMsg rng (typeCheck ctxt dict)
+            let! keyTy, valTy = 
+                match dictTy with
+                | Dictionary(domTy, codTy, _) ->
+                    Result (domTy, codTy)
+                | _ ->
+                    Error [errorMsg + ": type " + dictTy.ToString() + " computed, but dictionary type expected",rng]
+            let! pKeyTy, pKeyComp = kCheckToset ctxt.tenv keyTy
+            let! pValTy = kCheckProset ctxt.tenv valTy
+            let venv' = venv.Add(key, keyTy)
+            let venv'' = venv'.Add(value, valTy)
+            let venv''' = venv''.Add(acc, targetTy)
+            let! bodyTy, bodyQ, pBodyTerm = 
+                withError errorMsg rng (typeCheck { ctxt with venv = venv''' } body)
+            do! Type.IsSubtype bodyTy targetTy
+            do! if not (bodyQ.[value] <= CoeffectMonotone) then
+                    Result ()
+                else
+                    Error ["Expected monotone usage of " + value + " but found " + bodyQ.[value].ToString(), rng]
+            do! if not (bodyQ.[acc] <= CoeffectMonotone) then
+                    Result ()
+                else
+                    Error ["Expected monotone usage of " + acc + " but found " + bodyQ.[value].ToString(), rng]            
+            let resQ = contr dictQ (bodyQ.Remove(acc).Remove(key).Remove(value))
+            // pDictTerm, pBodyTerm, pKeyComp, pKeyTy, pValTy, pTargetTy
+            let pBodyFun = P.Abs(key, pKeyTy, P.Abs(value, pValTy, P.Abs(acc, pTargetTy, pBodyTerm)))
+            let pElemTy = P.Prod(pKeyTy, pValTy)
+            let pDictTy = P.List pElemTy
+            let pIncTerm = P.App(P.App(P.App(pBodyFun, P.Proj1(P.Var("!h"))), P.Proj2(P.Var("!h"))), P.Var("!acc"))
+            let pElim = 
+                P.LetRec("!f", "!d", pDictTy, pTargetTy, P.Abs("!acc", pTargetTy,
+                        P.ListCase(
+                            P.Var("!d"),
+                            pTargetBot,
+                            P.Abs("!h",  pElemTy, P.Abs("!t", pDictTy, 
+                                P.App(P.App(pTargetJoin, pIncTerm), P.App(P.App(P.Var("!f"), P.Var("t")), pIncTerm)))))))
+            let pResTerm = P.App(P.App(pElim , pDictTerm), pTargetBot)
+            return (targetTy, resQ, pResTerm)
+        }
     | Cons(e1, e2, e3, rng) ->
-        match typeCheck ctxt e3 with
-        | Success( Dictionary(domTy,codTy,_), dictR ) ->
-            match typeCheck ctxt e2 with
-            | Success(valTy, valR) ->
-                match Ty.IsSubtype valTy codTy with
-                | SubtypeResult.Success ->
-                    match typeCheck ctxt e1 with
-                    | Success(keyTy, keyR) ->
-                        match Ty.IsSubtype keyTy domTy with
-                        | SubtypeResult.Success ->
-                            let ty = Dictionary(domTy,codTy,noRange)
-                            let R = contr (contr (comp CoeffectAny keyR) valR) dictR
-                            Success(ty,R)
-                        | SubtypeResult.Failure(stack) ->
-                            let stack' = List.map (fun msg -> (msg,noRange)) stack
-                            Failure((errorMsg + ": key type " + keyTy.ToString() + " is not a subtype of dictionary domain type " + domTy.ToString(), rng) :: stack')
-                    | Failure(stack) ->
-                        Failure((errorMsg,rng) :: stack)
-                | SubtypeResult.Failure(stack) ->
-                   Failure((errorMsg + ": value " + e2.ToString() + " is not a subtype of dictionary codomain " + codTy.ToString(), rng) :: List.map (fun k -> k,noRange) stack)
-            | Failure(stack) ->
-                Failure((errorMsg,rng) :: stack)
-        | Success(wrongTy, _) ->
-            Failure [errorMsg + ": dictionary type expected, but got " + wrongTy.ToString(),rng]
-        | Failure(stack) ->
-            Failure((errorMsg,rng) :: stack)
+        check {
+            let! keyTy, keyQ, pKeyTerm = withError errorMsg rng (typeCheck ctxt e1)
+            let! valTy, valQ, pValTerm = withError errorMsg rng (typeCheck ctxt e2)
+            let! dictTy, dictQ, pDictTerm = withError errorMsg rng (typeCheck ctxt e3)
+            let! dKeyTy, dValTy = 
+                match dictTy with
+                | Dictionary(domTy, codTy,_) ->
+                    Result (domTy, codTy)
+                | _ ->
+                    Error [errorMsg + ": dictionary type expected, but got " + wrongTy.ToString(),rng]
+            do! withError 
+                    (errorMsg + ": key type " + keyTy.ToString() + " is not a subtype of dictionary domain type " + domTy.ToString()) 
+                    rng 
+                    (Ty.IsSubtype keyTy dKeyTy)
+            do! withError 
+                    (errorMsg + ": value " + e2.ToString() + " is not a subtype of dictionary codomain " + codTy.ToString())
+                    rng
+                    (Ty.IsSubtype valTy dValTy)
+            let resQ = contr (contr (comp CoeffectAny keyQ) valQ) dictQ
+            let pResTerm = P.Cons(P.Pair(pKeyTerm, pValTerm), pDictTerm)
+            return dictTy, resQ, pResTerm
+        }
     | Fst(ePair,rng) ->
-        match typeCheck ctxt ePair with
-        | Success(Prod(tyL,_,_), R) ->
-            Success(tyL, R)
-        | Success(wrongTy, _) ->
-            Failure [errorMsg + ": expected product type, but got " + wrongTy.ToString(),rng]
-        | Failure(stack) ->
-            Failure((errorMsg,rng) :: stack)
+        check {
+            let! pairTy, pairQ, pPairTerm = withError errorMsg rng (typeCheck ctxt ePair)
+            let! resTy = 
+                match pairTy with
+                | Prod(tyL,_,_) ->
+                    Result tyL
+                | _ ->
+                    Error [errorMsg + ": expected product type, but got " + pairTy.ToString(),rng]
+            return resTy, pairQ, P.Proj1(pPairTerm)
+        }
     | Snd(ePair,rng) ->
-        match typeCheck ctxt ePair with
-        | Success(Prod(_,tyR,_), R) ->
-            Success(tyR, R)
-        | Success(wrongTy, _) ->
-            Failure [errorMsg + ": expected product type, but got " + wrongTy.ToString(),rng]
-        | Failure(stack) ->
-            Failure((errorMsg,rng) :: stack)
+        check {
+            let! pairTy, pairQ, pPairTerm = withError errorMsg rng (typeCheck ctxt ePair)
+            let! resTy = 
+                match pairTy with
+                | Prod(_,tyR,_) ->
+                    Result tyR
+                | _ ->
+                    Error [errorMsg + ": expected product type, but got " + pairTy.ToString(),rng]
+            return resTy, pairQ, P.Proj2(pPairTerm)
+        }
     | Pair(eFst, eSnd, rng) ->
-        match typeCheck ctxt eFst with
-        | Success(fstTy, fstR) ->
-            match typeCheck ctxt eSnd with
-            | Success(sndTy, sndR) ->
-                Success( Prod(fstTy, sndTy, noRange), contr fstR sndR )
-            | Failure(stack) ->
-                Failure((errorMsg,rng) :: stack)
-        | Failure(stack) ->
-            Failure((errorMsg,rng) :: stack)
+        check {
+            let! fstTy, fstQ, pFstTerm = withError errorMsg rng (typeCheck ctxt eFst)
+            let! sndTy, sndQ, pSndTerm = withError errorMsg rng (typeCheck ctxt eSnd)
+            return Prod(fstTy, sndTy, noRange), contr fstQ sndQ, P.Pair(pFstTerm, pSndTerm)
+        }
     | Case(eScrut, targetTy, lName, lElim, rName, rElim,rng) ->
-        match typeCheck ctxt eScrut with
-        | Success(Sum(lTy,rTy,_), R) ->
-            let venvL = venv.Add(lName,lTy)
+        check {
+            let! scrutTy, scrutQ, pScrutTerm = withError errorMsg rng (typeCheck ctxt eScrut)
+            let! lTy, rTy = 
+                match scrutTy with
+                | Sum(lTy, rTy, _) ->
+                    Result (lTy, rTy)
+                | _ ->
+                    Error [errorMsg + ": case scrutinee should have sum type, but instead found" + scrutTy.ToString(), rng]
+            let venvL = venv.Add(lName, lTy)
             let ctxtL = { ctxt with venv = venvL }
-            match typeCheck ctxtL lElim with
-            | Success(lElimTy, S) ->
-                match Ty.IsSubtype lElimTy targetTy with
-                | SubtypeResult.Success ->
-                    let venvR = venv.Add(rName,rTy)
-                    let ctxtR = { ctxt with venv = venvR }
-                    match typeCheck ctxtR rElim with
-                    | Success(rElimTy, T) ->
-                        match Ty.IsSubtype rElimTy targetTy with
-                        | SubtypeResult.Success ->
-                            Success(targetTy, contr R (contr S T))
-                        | SubtypeResult.Failure(stack) ->
-                            Failure((errorMsg,rng) :: List.map (fun str -> (str,noRange)) stack)
-                    | Failure(stack) ->
-                        Failure( (errorMsg,rng) :: stack )
-                | SubtypeResult.Failure(stack) ->
-                    Failure((errorMsg,rng) :: List.map (fun str -> (str,noRange)) stack)
-            | Failure(stack) ->
-                Failure((errorMsg, rng) :: stack)
-        | Success(scrTy,_) ->
-            Failure [errorMsg + ": case scrutinee should have sum type, but instead found" + scrTy.ToString(), rng]
-        | Failure(stack) ->
-            Failure((errorMsg,rng) :: stack)
+            let! lTy, lQ, plTerm = withError errorMsg rng (typeCheck ctxtL lElim)
+            let! pTyL = kCheckProset ctxt.tenv lTy
+            let venvR = venv.Add(rName, rTy)
+            let ctxtR = { ctxt with venv = venvR }
+            let! rTy, rQ, prTerm = withError errorMsg rng (typeCheck ctxtR rElim)
+            let! pTyR = kCheckProset ctxt.tenv rTy
+            do! withError errorMsg rng (Ty.IsSubtype lTy targetTy)
+            do! withError errorMsg rng (Ty.IsSubtype rTy targetTy)
+            return targetTy, contr (contr scrutQ lQ) rQ, P.SumCase(pScrutTerm, P.Abs(lName, pTyL, plTerm), P.Abs(rName, pTyR, prTerm)) 
+        }
     | Inl(lty, rty, expr, rng) ->
-        match typeCheck ctxt expr with
-        | Success(exprTy,R) ->
-            match Ty.IsSubtype exprTy lty with
-            | SubtypeResult.Success ->
-                Success(Sum(lty,rty,noRange),R)        
-            | SubtypeResult.Failure(stack) ->
-                Failure((errorMsg,rng) :: List.map (fun str -> (str,noRange)) stack)
-        | Failure(stack) ->
-            Failure((errorMsg,rng) :: stack)
+        check {
+            let! exprTy, exprQ, pExprTerm = withError errorMsg rng (typeCheck ctxt expr)
+            do! withError errorMsg rng (Ty.IsSubtype exprTy lty)
+            return Sum(lty,rty,noRange), exprQ, P.In1(pExprTerm)
+        }
     | Inr(lty, rty, expr, rng) ->
-        match typeCheck ctxt expr with
-        | Success(exprTy,R) ->
-            match Ty.IsSubtype exprTy rty with
-            | SubtypeResult.Success ->
-                Success(Sum(lty,rty,noRange),R)        
-            | SubtypeResult.Failure(stack) ->
-                Failure((errorMsg,rng) :: List.map (fun str -> (str,noRange)) stack)
-        | Failure(stack) ->
-            Failure((errorMsg,rng) :: stack)
+        check {
+            let! exprTy, exprQ, pExprTerm = withError errorMsg rng (typeCheck ctxt expr)
+            do! withError errorMsg rng (Ty.IsSubtype exprTy lry)
+            return Sum(lty,rty,noRange), exprQ, P.In2(pExprTerm)
+        }
     | Cap(q, e, rng) ->
-        match typeCheck ctxt e with
-        | Success(eTy, R) ->
-            Success(Capsule(eTy,q,rng), comp q R)
-        | Failure(stack) ->
-            Failure((errorMsg,rng) :: stack)
+        check {
+            let! eTy, eQ, eTerm = withError errorMsg rng (typeCheck ctxt e)
+            return Capsule(eTy, q, noRange), (comp q eQ), eTerm
+        }
     | Uncap(q, varId, capsule, body, rng) ->
-        match typeCheck ctxt capsule with
-        | Success(Capsule(contentsTy,s,_), R) when s = q ->
+        check {
+            let! capsuleTy, capsuleQ, capsuleTerm = 
+                withError errorMsg rng (typeCheck ctxt capsule)
+            let! contentsTy = 
+                match capsuleTy with
+                | Capsule(contentsTy, s, _) when s = q ->
+                    Result contentsTy
+                | Capsule(_,_,_) ->
+                    Error [errorMsg + ": expected a capsule " + q.ToString() + " expression in the binding position, but got a capsule " + s.ToString(), rng]
+                | _ ->
+                    Error [errorMsg + ": expected an expression of capsule type in the binding position, but got an expression of type " + bindTy.ToString(), rng]
+            let! pContentsTy = kCheckProset ctxt.tenv contentsTy
             let venv' = venv.Add(varId, contentsTy)
-            match typeCheck { ctxt with venv = venv' } body with
-            | Success(bodyTy, S) ->
-                match S.TryFind(varId) with
-                | Some(r) when Coeffect.LessThan r q -> 
-                    Success(bodyTy, contr R (S.Remove(varId)))
-                | Some(r) ->
-                    Failure [(errorMsg + ": " + varId + " has coeffect " + r.ToString() + " but coeffect more restrictive 
-                              than " + q.ToString() + " expected", rng)]
-                | None ->
-                    failwith "unreachable"
-            | Failure(stack) ->
-                Failure( (errorMsg,rng) :: stack )
-        | Success(Capsule(contentsTy, s,_),R) ->
-            Failure[errorMsg + ": expected a capsule " + q.ToString() + " expression in the binding position, but got an capsule " + s.ToString(), rng]
-        | Success(bindTy,_) ->
-            Failure [errorMsg + ": expected an expression of capsule type in the binding position, but got an expression of type " + bindTy.ToString(), rng]
-        | Failure(stack) ->
-            Failure( (errorMsg,rng) :: stack )
+            let! bodyTy, bodyQ, bodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } body)
+            do! 
+                match Coeffect.LessThan bodyQ.[varId] q with
+                | true ->
+                    Result ()
+                | false ->
+                    Error [(errorMsg + ": " + varId + " has coeffect " + r.ToString() + " but coeffect more restrictive than " 
+                           + q.ToString() + " expected", rng)]
+            return bodyTy, contr capsuleQ (bodyQ.Remove(varId)), P.App(P.Abs(varId, pContentsTy, bodyTerm), capsuleTerm)  
+        }
     | ISet(expr, rng) ->
-        match typeCheck ctxt expr with
-        | Success(contentsTy,R) ->
-            match kCheckToset (ctxt.tenv) contentsTy with
-            | None ->
-                Success(IVar(contentsTy, noRange), comp CoeffectAny R)
-            | Some(stack) ->
-                Failure((errorMsg + ": computed type " + contentsTy.ToString() + " for " + expr.ToString(),rng) :: stack)
-        | Failure(stack) ->
-            Failure((errorMsg,rng) :: stack)
+        check {
+            let! contentsTy, contentsQ, pContentsTerm = withError errorMsg rng (typeCheck ctxt expr)
+            let tosetErrorMsg =
+                (errorMsg + ": computed type " + contentsTy.ToString() + " for " + expr.ToString())
+            let! _, _ = withError tosetErrorMsg rng (kCheckToset ctxt.tenv contentsTy)
+            return IVar(contentsTy, noRange), comp CoeffectAny contentsQ, P.Cons(pContentsTerm, P.EmptyList)
+        }
     | IGet(varId, ivar, body, rng) ->
-        match typeCheck ctxt ivar with
-        | Success(IVar(tyContents,_), R) ->
-            let venv' = venv.Add(varId,tyContents)
-            match typeCheck { ctxt with venv = venv' } body with
-            | Success(tyBody,S) ->
-                Success(Partial(tyBody,noRange), contr R S)
-            | Failure(stack) ->
-                Failure( (errorMsg, rng) :: stack )
-        | Success(bindTy,_) ->
-            Failure [errorMsg + ": " + expr.ToString() + " expected to have ivar type, but type " + bindTy.ToString() + " was computed.", rng]
-        | Failure(stack) ->
-            Failure( (errorMsg,rng) :: stack )
+        check {
+            let! ivarTy, ivarQ, pIvarTerm = withError errorMsg rng (typeCheck ctxt ivar)
+            let! tyContents =
+                match ivarTy with
+                | IVar(tyContents,_) ->
+                    Result tyContents
+                | _ ->
+                    Error [errorMsg + ": " + expr.ToString() + " expected to have ivar type, but type " + bindTy.ToString() + " was computed.", rng]
+            let! pTyContents = kCheckProset ctxt.tenv tyContents
+            let venv' = venv.Add(varId, tyContents)
+            let! bodyTy, bodyQ, pBodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } ) body)
+            let! pBodyTy, pBodyBot, pBodyJoin = kCheckSemilattice ctxt.tenv bodyTy
+            let pIvarTy = P.List pTyContents
+            let resTerm = 
+                P.ListCase(
+                    pIvarTerm, 
+                    pBodyBot,
+                    P.Abs("!hi", pTyContents, P.Abs("!ti", pIvarTy, 
+                        P.ListCase(
+                            P.Var("!ti"),
+                            P.In1(P.App(P.Abs(varId, pTyContents, pBodyTerm), P.Var("!hi"))),
+                            P.Abs("_", pTyContents, P.Abs("_", pIvarTy, P.In2(P.PrimUnitVal)))))))
+            return Partial(bodyTy, noRange), contr ivarQ (bodyQ.Remove(varId)), resTerm
+        }
     | Let(varId, bindExpr, bodyExpr, rng) ->
-        match typeCheck ctxt bindExpr with
-        | Success(tyBind, R) ->
-            let venv' = venv.Add(varId,tyBind)
-            match typeCheck { ctxt with venv = venv' } bindExpr with
-            | Success(tyBody, S) ->
-                Success(tyBody, contr (comp S.[varId] R) (S.Remove(varId)))
-            | Failure(stack) ->
-                Failure((errorMsg,rng) :: stack)
-        | Failure(stack) ->
-            Failure((errorMsg,rng) :: stack)
+        check {
+            let! bindTy, bindQ, pBindTerm = withError errorMsg rng (typeCheck ctxt bindExpr)
+            let! pBindTy = kCheckProset ctxt.tenv bindTy
+            let venv' = venv.Add(varId, bindTy)
+            let! bodyTy, bodyQ, pBodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } bodyExpr)
+            let resTerm = P.App(P.Abs(varId, pBindTy, pBodyTerm), pBindTerm)
+            return bodyTy, contr (comp bodyQ.[varId] bindQ) (bodyQ.Remove(varId)), resTerm
+        }
     | MLet(varId, partialComputationExpr, bodyExpr, rng) ->
-        match typeCheck ctxt partialComputationExpr with
-        | Success(Partial(tyBind,_),R) ->
-            let venv' = venv.Add(varId,tyBind)
-            match typeCheck { ctxt with venv = venv' } bodyExpr with
-            | Success(Partial(tyBody,_),S) ->
-                Success(Partial(tyBody,noRange), contr (comp S.[varId] R) (S.Remove(varId)))
-            | Success(tyBody,_) ->
-                Failure [errorMsg + ": monadic let expected a partial computation in body position, but instead got " + tyBody.ToString(),rng]
-            | Failure(stack) ->
-                Failure((errorMsg,rng) :: stack)
-        | Success(tyRes,_) ->
-            Failure [errorMsg + ": monadic let expected a partial computation in binding position, but instead got " + tyRes.ToString(),rng]
-        | Failure(stack) ->
-            Failure((errorMsg,rng) :: stack)
+        check {
+            let! partialCompTy, partialCompQ, pPartialCompTerm =
+                withError errorMsg rng (typeCheck ctxt partialComputationExpr)
+            let! bindTy = 
+                match partialCompTy with
+                | Partial(bindTy,_) ->
+                    Result bindTy
+                | _ ->
+                    Failure [errorMsg + ": monadic let expected a partial computation in body position, but instead got " + partialCompTy.ToString(),rng]
+            let pBindTy = kCheckProset ctxt.tenv bindTy
+            let venv' = venv.Add(varId, bindTy)
+            let! bodyTy, bodyQ, pBodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } bodyExpr)
+            do!
+                match Coeffect.LessThan bodyQ.[varId] CoeffectMonotone with
+                | true ->
+                    Result ()
+                | false ->
+                    Error ["Expected monotone (+) usage of " + varId + " but computed " + bodyQ.[varId].ToString()]
+            let pBodyFun = P.Abs(varId, pBindTy, pBodyTerm)
+            let resTerm = P.SumCase(
+                            pPartialCompTerm, 
+                            P.Abs("!l", pBindTy, P.In1(P.App(pBodyFun, P.Var("!r")))),
+                            P.Abs("!r", P.Unit, P.In2(P.PrimUnitVal)))
+            return Partial(bodyTy, noRange), contr partialCompQ (bodyQ.Remove(varId)), resTerm
+        }
     | MRet(expr,rng) ->
-        match typeCheck ctxt expr with
-        | Success(tyExpr,R) ->
-            Success(Partial(tyExpr,noRange), R)
-        | Failure(stack) ->
-            Failure((errorMsg,rng) :: stack)
+        check {
+            let! exprTy, exprQ, pExprTerm = withError errorMsg rng (typeCheck ctxt expr)
+            return Partial(exprTy, noRange), exprQ, P.In1(pExprTerm)
+        }
  
 // type TypeEnvironment = { tyVarEnv : Map<string, Kind> ; tyBaseEnv : Map<string, Kind> }
 // type ValueEnvironment = Map<string, Ty>

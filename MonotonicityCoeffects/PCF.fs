@@ -40,23 +40,6 @@ type Term =
     | SumCase of scrutinee : Term * leftCase : Term * rightCase : Term
     | LetRec of funName : string * parName : string * domTy : Ty  * codTy : Ty * body : Term
 
-let lessThan (t : Term)  =
-    match t with
-    | PrimNatVal(m) ->
-        let lessThan' (s : Term) =
-            match s with
-            | PrimNatVal(n) ->
-                if m < n then
-                    PrimBoolVal(true)
-                else    
-                    PrimBoolVal(false)
-            | _ ->
-                failwith "This program has 'gone wrong'. Oops."
-
-        Abs("n", Prim("Nat"), App(PrimFun("<'", lessThan'), Var("n")))
-    | _ ->
-        failwith "this program has 'gone wrong'. oops."
-
 /// s - the term to substitute
 /// x - the variable to substitute with s
 /// t - the term to substitute s into
