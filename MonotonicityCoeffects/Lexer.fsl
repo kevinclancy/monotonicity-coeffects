@@ -27,6 +27,7 @@ rule token = parse
 | "true"         { TRUE }
 | "false"        { FALSE }
 | "fun"          { FUN }
+| "with"         { WITH }
 | "forall"       { FORALL }
 | "Forall"       { BIGFORALL }
 | "TypeFun"      { TYPEFUN }
@@ -51,8 +52,6 @@ rule token = parse
 | "#"            { HASH }
 | "|"            { PIPE }
 | "case"		 { CASE }
-| "inl"          { INL }
-| "inr"          { INR }
 | "->"           { ARROW }
 | "<-"           { LARROW }
 | "=>"           { IMPLIES }

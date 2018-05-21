@@ -150,6 +150,7 @@ let main argv =
             Parser.start(Lexer.token) lexbuffer
           with
           | e ->
+            let message = e.Message
             printfn "Parse error. Line: %d, Column: %d" (lexbuffer.StartPos.Line + 1) lexbuffer.StartPos.Column
             exit 1
         
@@ -157,7 +158,11 @@ let main argv =
         | Error(stack) ->
             printStack stack
         | Result(ty,R) ->
-            printf "Successfully type-and-coeffect-checked program as: %s\n%s\n" (ty.ToString()) (R.ToString())
+            let mapCoeffectEntry (id : string) (q: Coeffect) =
+                q.ToString() + " " + id
+            let stringEntriesR = (Map.toList (Map.map mapCoeffectEntry R))
+            let stringR = String.concat ", " (List.map (fun (_,v) -> v) stringEntriesR)
+            printf "Successfully checked program.\nType: %s\nCoeffect: %s\n" (ty.ToString()) stringR
         0 // return an integer exit code
     with 
     | :? IndexOutOfRangeException ->

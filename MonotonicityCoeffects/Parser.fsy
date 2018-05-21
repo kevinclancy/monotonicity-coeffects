@@ -15,7 +15,7 @@ open Ast
 %token AT DOT PLUS MINUS QUESTION ASTERISK LPAREN RPAREN IN LET END EOF FST SND COMMA OF CASE 
 %token INL INR TO CAP UNCAP PIPE TYPES SEMICOLON LBRACK RBRACK BANG
 %token HASH DICT TOSET POSET SEMILATTICE FORALL BIGFORALL IMPLIES ARROW
-%token LSQUAREBRACKET RSQUAREBRACKET LARROW AND TYPEFUN COLONS
+%token LSQUAREBRACKET RSQUAREBRACKET LARROW AND TYPEFUN COLONS WITH
 
 %right ARROW DICT PLUS ASTERISK IMPLIES
 
@@ -38,14 +38,22 @@ ExprList : ExprList Expr { App($1,$2, parseState.ResultRange) }
 
 LetList : ID EQUAL Expr IN Expr END { Let($1,$3,$5, parseState.ResultRange) }
         | ID EQUAL Expr AND LetList { Let($1,$3,$5,parseState.ResultRange) }
+		| PIPE ID PIPE EQUAL Expr IN Expr END { IGet($2, $5, $7, parseState.ResultRange) }
+		| PIPE ID PIPE EQUAL Expr AND LetList { IGet($2, $5, $7, parseState.ResultRange) }
+		| EXTRACT TO Ty WITH ID ID ID EQUAL Expr IN Expr END { Extract($3,$5,$6,$7,$9,$11, parseState.ResultRange) }
+		| EXTRACT TO Ty WITH ID ID ID EQUAL Expr AND LetList { Extract($3,$5,$6,$7,$9,$11, parseState.ResultRange) }
+		| CAP Scalar ID EQUAL Expr IN Expr END { Uncap($2,$3,$5,$7, parseState.ResultRange) }
+		| CAP Scalar ID EQUAL Expr AND LetList { Uncap($2,$3,$5,$7, parseState.ResultRange) }
 
 ParList : LPAREN ID COLON TyList RPAREN ParList { Abs($2,$4,$6,parseState.ResultRange) }
         | LPAREN ID COLON ProperKindPrime RPAREN ParList { Forall($2,$4,$6, parseState.ResultRange) }
 		| Expr { $1 }
 
+EntryList : Expr ARROW Expr COMMA EntryList { Cons($1,$3,$5,parseState.ResultRange) }
+          | Expr ARROW Expr COLON Ty RBRACK { Cons($1,$3,Bot($5, noRange), parseState.ResultRange) } 
+
 CoeffectAscriptionList : CoeffectAscriptionList COMMA Scalar ID { ($3,$4) :: $1 }
 					   | Scalar ID { [($1,$2)] }
-
 
 
 Expr: INT                        { Int($1, parseState.ResultRange) }
@@ -55,7 +63,7 @@ Expr: INT                        { Int($1, parseState.ResultRange) }
 	| LET LetList { $2 }
 	| CONST { Const($1, parseState.ResultRange) }
 	| ID { Var($1, parseState.ResultRange) }
-	| BOT Ty { Bot($2, parseState.ResultRange) }
+	| LPAREN BOT Ty RPAREN { Bot($3, parseState.ResultRange) }
 	| JOIN Ty Expr Expr { Join($2, $3, $4, parseState.ResultRange) }
 	| CONS Expr Expr Expr { Cons($2, $3, $4, parseState.ResultRange) }
 	| FST Expr { Fst($2, parseState.ResultRange) }
@@ -67,14 +75,12 @@ Expr: INT                        { Int($1, parseState.ResultRange) }
 	| INL Ty Ty Expr { Inl($2,$3,$4, parseState.ResultRange) }
 	| INR Ty Ty Expr { Inr($2,$3,$4, parseState.ResultRange) }
 	| CAP Scalar Expr { Cap($2, $3, parseState.ResultRange) }
-	| LET CAP Scalar ID EQUAL Expr IN Expr { Uncap($3, $4, $6, $8, parseState.ResultRange) }
 	| PIPE Expr PIPE { ISet($2, parseState.ResultRange) }
-	| LET PIPE ID PIPE EQUAL Expr IN Expr END { IGet($3, $6, $8, parseState.ResultRange) }
-	| LET CONS Ty ID ID ID EQUAL Expr IN Expr END { Extract($3,$4,$5,$6,$8,$10, parseState.ResultRange) }
 	| LET LSQUAREBRACKET ID RSQUAREBRACKET LARROW Expr IN Expr END { MLet($3,$6,$8, parseState.ResultRange) }
 	| LSQUAREBRACKET Expr RSQUAREBRACKET { MRet($2, parseState.ResultRange) }
 	| AT LPAREN CoeffectAscriptionList RPAREN Expr { CoeffectAscription($3, $5, parseState.ResultRange) } 
 	| COLONS Ty Expr { TypeAscription($2,$3, parseState.ResultRange) }
+	| LBRACK EntryList { $2 }
 
 Scalar: PLUS         { CoeffectMonotone }
       | MINUS        { CoeffectAntitone }

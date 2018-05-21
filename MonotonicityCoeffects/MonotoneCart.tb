@@ -8,10 +8,18 @@
   Cart = | Checkout | * (Set (ActionId * Action));
 in
 
-let monoIf = 
+let add =
+ fun (x : ItemId)
+   inl ItemId ItemId x
+ end
+and remove = 
+ fun (x : ItemId)
+   inr ItemId ItemId x
+ end
+and monoIf = 
 
   fun (src : SEMILATTICE) (dest : SEMILATTICE) (cond : src) (res : dest)
-      let cons dest k v acc = cons unit cond (bot (Unit |> src)) in 
+      let extract to dest with k v acc = cons unit cond (bot (Unit |> src)) in
 		res
       end
   end
@@ -19,7 +27,7 @@ let monoIf =
 and setCount =
 
 	fun (elemTy : TOSET) (s : Set elemTy)
-		let cons Nat key val acc = s in
+		let extract to Nat with key val acc = s in
 			(plus acc 1)
 		end
 	end	
@@ -27,23 +35,29 @@ and setCount =
 and isComplete =
 
 	fun (cart : Cart) :: [Bool] @(+ cart)
-		
-		let co = fst cart and ops = snd cart in
-		let | check | = co in
-		let rng = fst check and addr = snd check in
-		let lo = fst rng and hi = snd rng in
-		let setIds =
-			let cons (Set ActionId) idAction isMember seen = ops in
-			let id = fst idAction and act = snd idAction in
-			(monoIf !Bool !(Set ActionId) (bAnd (leq lo id) (leq id hi)) seen)
-			end end
+		let iCheckout = fst cart 
+		and actions = snd cart
+		and | checkout | = iCheckout
+		and rng = fst checkout 
+		and addr = snd checkout
+		and lo = fst rng 
+		and hi = snd rng
+		and setIds =
+			let extract to (Set ActionId) with idAction isMember seen = actions
+			and id = fst idAction 
+			and act = snd idAction in
+				(monoIf !Bool !(Set ActionId) (bAnd (leq lo id) (leq id hi)) seen)
+			end
 		in
 			let numIds = (setCount !ActionId setIds) in
 				(geq numIds (plus 1 (minus hi lo)))
 			end
-		end end end end end
+		end
 	end
 
 in
-	isComplete
+	let co = | ((4,6), 1337) | 
+	and actions = { (4, (add 40)) -> true , (5, (remove 50)) -> true, (6, (add 20)) -> true : (ActionId*Action) |> Bool }
+	in (isComplete (co, actions))
+	end
 end
