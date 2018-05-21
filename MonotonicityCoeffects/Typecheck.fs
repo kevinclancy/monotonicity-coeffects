@@ -114,7 +114,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 match tyFun with
                 | FunTy(domTy, q, codTy, rng) ->
                     check {
-                        do! withError errorMsg rng (Ty.IsSubtype tyArg domTy)
+                        do! withError errorMsg rng (Ty.IsSubtype ctxt.tenv.tyAliasEnv tyArg domTy)
                         let qs = contr qsFun (comp q qsArg)
                         let term = P.App(termFun, termArg)
                         return (codTy, qs, term)
@@ -129,7 +129,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let nameOnlyMono = Map.map (fun k v -> if k = name then Coeffect.Use else Coeffect.Ign) venv
             Result (ty, nameOnlyMono, P.Var(name)) 
         | None ->
-            Error [errorMsg + ": identifier " + name.ToString() + "undeclared",rng]
+            Error [errorMsg + ": identifier " + name.ToString() + " undeclared",rng]
     | Bot(ty,rng) ->
         check {
             let! _, pBot, _ = withError errorMsg rng (kCheckSemilattice tenv ty)
@@ -141,8 +141,8 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let! _, _, pJoin = withError errorMsg rng (kCheckSemilattice tenv ty)
             let! ty1, qs1, pTerm1 = withError errorMsg rng (typeCheck ctxt e1)
             let! ty2, qs2, pTerm2 = withError errorMsg rng (typeCheck ctxt e2)
-            do! withError errorMsg rng (Ty.IsEquiv ty1 ty)
-            do! withError errorMsg rng (Ty.IsEquiv ty2 ty)
+            do! withError errorMsg rng (Ty.IsEquiv ctxt.tenv.tyAliasEnv ty1 ty)
+            do! withError errorMsg rng (Ty.IsEquiv ctxt.tenv.tyAliasEnv ty2 ty)
             let term = P.App(P.App(pJoin, pTerm1), pTerm2)
             return ty, contr qs1 qs2, term
         }
@@ -166,7 +166,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let venv''' = venv''.Add(acc, targetTy)
             let! bodyTy, bodyQ, pBodyTerm = 
                 withError errorMsg rng (typeCheck { ctxt with venv = venv''' } body)
-            do! Ty.IsSubtype bodyTy targetTy
+            do! Ty.IsSubtype ctxt.tenv.tyAliasEnv bodyTy targetTy
             do! if (Coeffect.LessThan bodyQ.[value] CoeffectMonotone) then
                     Result ()
                 else
@@ -206,11 +206,11 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             do! withError 
                     (errorMsg + ": key type " + keyTy.ToString() + " is not a subtype of dictionary domain type " + dKeyTy.ToString()) 
                     rng 
-                    (Ty.IsSubtype keyTy dKeyTy)
+                    (Ty.IsSubtype ctxt.tenv.tyAliasEnv keyTy dKeyTy)
             do! withError 
                     (errorMsg + ": value " + e2.ToString() + " is not a subtype of dictionary codomain " + dValTy.ToString())
                     rng
-                    (Ty.IsSubtype valTy dValTy)
+                    (Ty.IsSubtype ctxt.tenv.tyAliasEnv valTy dValTy)
             let resQ = contr (contr (comp CoeffectAny keyQ) valQ) dictQ
             let pResTerm = P.Cons(P.Pair(pKeyTerm, pValTerm), pDictTerm)
             return dictTy, resQ, pResTerm
@@ -219,7 +219,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
         check {
             let! pairTy, pairQ, pPairTerm = withError errorMsg rng (typeCheck ctxt ePair)
             let! resTy = 
-                match pairTy with
+                match Ty.normalize(ctxt.tenv.tyAliasEnv, pairTy) with
                 | Prod(tyL,_,_) ->
                     Result tyL
                 | _ ->
@@ -230,7 +230,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
         check {
             let! pairTy, pairQ, pPairTerm = withError errorMsg rng (typeCheck ctxt ePair)
             let! resTy = 
-                match pairTy with
+                match Ty.normalize(ctxt.tenv.tyAliasEnv, pairTy) with
                 | Prod(_,tyR,_) ->
                     Result tyR
                 | _ ->
@@ -247,7 +247,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
         check {
             let! scrutTy, scrutQ, pScrutTerm = withError errorMsg rng (typeCheck ctxt eScrut)
             let! lTy, rTy = 
-                match scrutTy with
+                match Ty.normalize(ctxt.tenv.tyAliasEnv, scrutTy) with
                 | Sum(lTy, rTy, _) ->
                     Result (lTy, rTy)
                 | _ ->
@@ -260,20 +260,20 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let ctxtR = { ctxt with venv = venvR }
             let! rTy, rQ, prTerm = withError errorMsg rng (typeCheck ctxtR rElim)
             let! pTyR = kCheckProset ctxt.tenv rTy
-            do! withError errorMsg rng (Ty.IsSubtype lTy targetTy)
-            do! withError errorMsg rng (Ty.IsSubtype rTy targetTy)
+            do! withError errorMsg rng (Ty.IsSubtype ctxt.tenv.tyAliasEnv lTy targetTy)
+            do! withError errorMsg rng (Ty.IsSubtype ctxt.tenv.tyAliasEnv rTy targetTy)
             return targetTy, contr (contr scrutQ lQ) rQ, P.SumCase(pScrutTerm, P.Abs(lName, pTyL, plTerm), P.Abs(rName, pTyR, prTerm)) 
         }
     | Inl(lty, rty, expr, rng) ->
         check {
             let! exprTy, exprQ, pExprTerm = withError errorMsg rng (typeCheck ctxt expr)
-            do! withError errorMsg rng (Ty.IsSubtype exprTy lty)
+            do! withError errorMsg rng (Ty.IsSubtype ctxt.tenv.tyAliasEnv exprTy lty)
             return Sum(lty,rty,noRange), exprQ, P.In1(pExprTerm)
         }
     | Inr(lty, rty, expr, rng) ->
         check {
             let! exprTy, exprQ, pExprTerm = withError errorMsg rng (typeCheck ctxt expr)
-            do! withError errorMsg rng (Ty.IsSubtype exprTy rty)
+            do! withError errorMsg rng (Ty.IsSubtype ctxt.tenv.tyAliasEnv exprTy rty)
             return Sum(lty,rty,noRange), exprQ, P.In2(pExprTerm)
         }
     | Cap(q, e, rng) ->
@@ -286,7 +286,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let! capsuleTy, capsuleQ, capsuleTerm = 
                 withError errorMsg rng (typeCheck ctxt capsule)
             let! contentsTy = 
-                match capsuleTy with
+                match Ty.normalize(ctxt.tenv.tyAliasEnv, capsuleTy) with
                 | Capsule(contentsTy, s, _) when s = q ->
                     Result contentsTy
                 | Capsule(_,s,_) ->
@@ -317,7 +317,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
         check {
             let! ivarTy, ivarQ, pIvarTerm = withError errorMsg rng (typeCheck ctxt ivar)
             let! tyContents =
-                match ivarTy with
+                match Ty.normalize(ctxt.tenv.tyAliasEnv, ivarTy) with
                 | IVar(tyContents,_) ->
                     Result tyContents
                 | _ ->
@@ -352,7 +352,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let! partialCompTy, partialCompQ, pPartialCompTerm =
                 withError errorMsg rng (typeCheck ctxt partialComputationExpr)
             let! bindTy = 
-                match partialCompTy with
+                match Ty.normalize(ctxt.tenv.tyAliasEnv, partialCompTy) with
                 | Partial(bindTy,_) ->
                     Result bindTy
                 | _ ->
@@ -377,14 +377,34 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
         check {
             let! exprTy, exprQ, pExprTerm = withError errorMsg rng (typeCheck ctxt expr)
             return Partial(exprTy, noRange), exprQ, P.In1(pExprTerm)
+        } 
+    | CoeffectAscription(assertions, expr, rng) ->
+        let checkAssertion (exprQ : CoeffectMap) (q : Coeffect, x : string) =
+            if not (ctxt.venv.ContainsKey(x)) then
+                Error ["coeffect ascription provided for undeclared variable " + x, rng]
+            else if not (Coeffect.LessThan exprQ.[x] q) then
+                Error ["Scalar " + exprQ.[x].ToString() + " computed for variable " + x + ", which is not more precise than the ascribed scalar " + q.ToString(), rng]
+            else
+                Result ()
+        check {
+            let! exprTy, exprQ, exprTerm = withError errorMsg rng (typeCheck ctxt expr)
+            do! sequence (List.map (checkAssertion exprQ) assertions)
+            return exprTy, exprQ, exprTerm  
         }
- 
+    | TypeAscription(ty, expr, rng) ->
+        check {
+            let! exprTy, exprQ, exprTerm = withError errorMsg rng (typeCheck ctxt expr)
+            do! withError errorMsg rng (Ty.IsSubtype ctxt.tenv.tyAliasEnv exprTy ty)
+            return exprTy, exprQ, exprTerm
+        }
+    
+  
 // type TypeEnvironment = { tyVarEnv : Map<string, Kind> ; tyBaseEnv : Map<string, Kind> }
 // type ValueEnvironment = Map<string, Ty>
 // type Context = { tenv : TypeEnvironment ; venv : ValueEnvironment }
 
 let progCheck (ctxt : Context) (p : Prog) : Check<Ty * CoeffectMap> = 
-    let foldAlias (acc : Check<TypeEnvironment>) (n : string) (ty : Ty) =
+    let foldAlias (acc : Check<TypeEnvironment>) ((n,ty) : string * Ty) =
         match acc with
         | Error(stack) ->
             Error(stack)
@@ -396,8 +416,8 @@ let progCheck (ctxt : Context) (p : Prog) : Check<Ty * CoeffectMap> =
                 Error(stack)
 
     check {
-        let tenvCheck = check { return ctxt.tenv }
-        let! tenv = Map.fold foldAlias tenvCheck p.typeAliases
+        let tenvCheck = Result ctxt.tenv
+        let! tenv = List.fold foldAlias tenvCheck p.typeAliases
         let! ty,R,pTerm = typeCheck { ctxt with tenv = tenv } p.body
         return ty,R
     }

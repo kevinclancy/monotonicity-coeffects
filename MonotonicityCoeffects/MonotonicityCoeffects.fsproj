@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <None Include="Lexer.fsl" />
+    <None Include="MonotoneCart.tb" />
     <None Include="test.tb" />
     <None Include="Parser.fsy" />
   </ItemGroup>

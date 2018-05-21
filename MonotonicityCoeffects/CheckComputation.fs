@@ -16,20 +16,12 @@ type CheckBuilder () =
         match comp with
         | Error(stack) ->
             Error(stack)
-        //| ValidPendingError(msg,rng,r) ->
-        //    match func r with
-        //    | Error(stack) ->
-        //        Error((msg,rng) :: stack)
-        //    | ValidPendingError(msg,rng) ->
-        //        ValidPendingError(msg,rng)
-        //    | Result(r) ->
-        //        Result(r)
         | Result(r) ->
             func r
-    
+
     member x.Return(value : 'A) : Check<'A> =
         Result(value)
-  
+
 let withError (msg : string) (rng : Range) (comp : Check<'A>) : Check<'A> =
     match comp with
     | Error(stack) ->
@@ -37,6 +29,15 @@ let withError (msg : string) (rng : Range) (comp : Check<'A>) : Check<'A> =
     | Result(r) ->
         Result(r)
   
+let rec sequence (l : List<Check<Unit>>) : Check<Unit> =
+    match l with
+    | Error(stack) :: _ ->
+        Error(stack)
+    | _ :: rest ->
+        sequence rest
+    | [] ->
+        Result ()
+
 // let setError (msg : string) (rng : Range) : Check<Unit> =
 //    ValidPendingError(msg, rng)   
 

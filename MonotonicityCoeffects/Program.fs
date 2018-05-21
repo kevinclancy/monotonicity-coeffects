@@ -120,6 +120,10 @@ let baseTyMap =
 let baseVEnv =
     Map<string, Ast.Ty>(
         [("plus", FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Nat", noRange), noRange), noRange))
+         ("minus", FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectAntitone, TyId("Nat", noRange), noRange), noRange))
+         ("bAnd", FunTy(TyId("Bool",noRange), CoeffectMonotone, FunTy(TyId("Bool",noRange), CoeffectMonotone, TyId("Bool", noRange), noRange), noRange))
+         ("leq", FunTy(TyId("Nat",noRange), CoeffectAntitone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Bool", noRange), noRange), noRange))
+         ("geq", FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectAntitone, TyId("Bool", noRange), noRange), noRange))
         // TODO: we need primitive unit values in syntax
          ("unit", TyId("Unit", noRange))]
     )

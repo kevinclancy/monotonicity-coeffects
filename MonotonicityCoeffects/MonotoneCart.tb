@@ -1,0 +1,49 @@
+﻿types
+  Set = (TypeFun x : TOSET . x |> Bool); 
+  ActionId = Nat;
+  ItemId = Nat;
+  NetworkAddr = Nat;
+  Action = ItemId + ItemId;
+  Checkout = (ActionId * ActionId) * NetworkAddr;
+  Cart = | Checkout | * (Set (ActionId * Action));
+in
+
+let monoIf = 
+
+  fun (src : SEMILATTICE) (dest : SEMILATTICE) (cond : src) (res : dest)
+      let cons dest k v acc = cons unit cond (bot (Unit |> src)) in 
+		res
+      end
+  end
+
+and setCount =
+
+	fun (elemTy : TOSET) (s : Set elemTy)
+		let cons Nat key val acc = s in
+			(plus acc 1)
+		end
+	end	
+
+and isComplete =
+
+	fun (cart : Cart) :: [Bool] @(+ cart)
+		
+		let co = fst cart and ops = snd cart in
+		let | check | = co in
+		let rng = fst check and addr = snd check in
+		let lo = fst rng and hi = snd rng in
+		let setIds =
+			let cons (Set ActionId) idAction isMember seen = ops in
+			let id = fst idAction and act = snd idAction in
+			(monoIf !Bool !(Set ActionId) (bAnd (leq lo id) (leq id hi)) seen)
+			end end
+		in
+			let numIds = (setCount !ActionId setIds) in
+				(geq numIds (plus 1 (minus hi lo)))
+			end
+		end end end end end
+	end
+
+in
+	isComplete
+end

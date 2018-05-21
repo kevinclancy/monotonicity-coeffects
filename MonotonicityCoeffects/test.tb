@@ -17,7 +17,21 @@ and setCount =
 		let cons Nat key val acc = s in
 			(plus acc 1)
 		end
+	end	
+and test1 =
+	fun (x : Nat) join Nat x 4 end
+and test2 = 
+	cons 2 true (cons 3 true (bot (set Nat)))
+and test3 = 
+	fun (o : Nat) @(+ o) 
+		fun (kva : Unit * Bool * Nat) @(* kva)
+			o
+		end
+	end
+and test4 = 
+	fun (x : Bool) :: Nat @(+ x)
+	  (monoIf !Bool !Nat x 5)
 	end
 in
-	setAdd
+	test4
 end

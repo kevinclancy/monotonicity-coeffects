@@ -184,22 +184,115 @@ type Ty =
             TyOp(id,pk,body,rng)
         else
             TyOp(id,pk,Ty.subst a x body, rng)
+    | ForallTy(id, pk, body, rng) ->
+        if x = id then
+            ForallTy(id,pk,body,rng)
+        else
+            ForallTy(id,pk,Ty.subst a x body, rng)        
     | Partial(ty, rng) ->
         Partial(Ty.subst a x ty, rng)
     | TyApp(op, arg, rng) ->
         TyApp(Ty.subst a x op, Ty.subst a x arg, rng)
 
-  static member IsEquiv (a : Ty) (b : Ty) : Check<Unit> =
+  static member IsEquiv (aliasEnv : Map<string, Ty>) (a : Ty) (b : Ty) : Check<Unit> =
     let errorMsg = "Type " + a.ToString() + " is not equivalent to " + b.ToString()
     check {
-        do! withError errorMsg noRange (Ty.IsSubtype a b)
-        do! withError errorMsg noRange (Ty.IsSubtype b a)
+        do! withError errorMsg noRange (Ty.IsSubtype aliasEnv a b)
+        do! withError errorMsg noRange (Ty.IsSubtype aliasEnv b a)
         return ()
     }
 
-  static member IsSubtype (a : Ty) (b : Ty) : Check<Unit> =
+  static member normalize (aliasEnv : Map<string, Ty>, a : Ty) =
+    match Ty.reduce aliasEnv a with
+    | Some(a') ->
+        Ty.normalize(aliasEnv, a')
+    | None ->
+        a
+
+  static member reduce (aliasEnv : Map<string, Ty>) (a : Ty) : Option<Ty> =
+    match a with
+    | TyId(name,rng) ->
+        match aliasEnv.TryFind(name) with
+        | Some(ty) ->
+            Some(ty)
+        | None ->
+            None
+    | FunTy(dom,q,cod,rng) ->
+        match Ty.reduce aliasEnv dom with
+        | Some(dom') ->
+            Some(FunTy(dom',q,cod,rng))
+        | None ->
+            match Ty.reduce aliasEnv cod with
+            | Some(cod') ->
+                Some(FunTy(dom,q,cod',rng))
+            | None ->
+                None
+    | Dictionary(dom,cod,rng) ->
+        match Ty.reduce aliasEnv dom with
+        | Some(dom') ->
+            Some(Dictionary(dom',cod,rng))
+        | None ->
+            match Ty.reduce aliasEnv cod with
+            | Some(cod') ->
+                Some(Dictionary(dom,cod',rng))
+            | None ->
+                None
+    | Capsule(tyContents,q,rng) ->
+        match Ty.reduce aliasEnv tyContents with
+        | Some(tyContents') ->
+            Some(Capsule(tyContents',q,rng))
+        | None ->
+            None
+    | Prod(tyL,tyR,rng) ->
+        match Ty.reduce aliasEnv tyL with
+        | Some(tyL') ->
+            Some(Prod(tyL',tyR,rng))
+        | None ->
+            match Ty.reduce aliasEnv tyR with
+            | Some(tyR') ->
+                Some(Prod(tyL,tyR',rng))
+            | None ->
+                None
+    | Sum(tyL, tyR, rng) ->
+        match Ty.reduce aliasEnv tyL with
+        | Some(tyL') ->
+            Some(Prod(tyL',tyR,rng))
+        | None ->
+            match Ty.reduce aliasEnv tyR with
+            | Some(tyR') ->
+                Some(Prod(tyL,tyR',rng))
+            | None ->
+                None
+    | IVar(tyContents, rng) ->
+        match Ty.reduce aliasEnv tyContents with
+        | Some(tyContents') ->
+            Some(IVar(tyContents', rng))
+        | None ->
+            None
+    | TyOp(varId,kind,body,rng) ->
+        None
+    | ForallTy(varId, kind, body, rng) ->
+        None
+    | Partial(tyContents, rng) ->
+        None
+    | TyApp(tyOp, argTy, rng) ->
+        match Ty.reduce aliasEnv tyOp with
+        | Some(forallTy') ->
+            Some(TyApp(forallTy', argTy, rng))
+        | None ->
+            match Ty.reduce aliasEnv argTy with
+            | Some(argTy') ->
+                Some(TyApp(tyOp,argTy',rng))
+            | None ->
+                match tyOp with
+                | TyOp(id,_,body,_) ->
+                    Some(Ty.subst argTy id body)
+                | _ ->
+                    failwith "this type 'went wrong'. oops." 
+
+  static member IsSubtype (aliasEnv : Map<string,Ty>) (a : Ty) (b : Ty) : Check<Unit> =
     let errorMsg = a.ToString() + " is not a subtype of " + b.ToString()
-    match (a,b) with
+    match (Ty.normalize(aliasEnv, a),Ty.normalize(aliasEnv, b)) with
     | TyId(aName,_), TyId(bName,_) ->
         match aName = bName with
         | true -> 
@@ -208,8 +301,8 @@ type Ty =
             Error ["Type " + aName + " is not a subtype of " + bName, noRange]
     | FunTy(aDom,aq,aCod,_), FunTy(bDom, bq, bCod, _) ->
         check {
-            let! _ = withError ("subtyping doesn't hold among domain types") noRange (Ty.IsSubtype bDom aDom)
-            let! _ = withError ("subtyping doesn't hold among codomain types") noRange (Ty.IsSubtype aCod bCod)
+            let! _ = withError ("subtyping doesn't hold among domain types") noRange (Ty.IsSubtype aliasEnv bDom aDom)
+            let! _ = withError ("subtyping doesn't hold among codomain types") noRange (Ty.IsSubtype aliasEnv aCod bCod)
             let! _ =
                 match bq <= aq with
                 | true ->
@@ -221,8 +314,8 @@ type Ty =
     | Dictionary(aDom,aCod,_), Dictionary(bDom,bCod,_) ->
         // should be able to relax this to contravariant domain, covariant codomain
         check {
-            let! _ = withError ("domain types not equal") noRange (Ty.IsEquiv aDom bDom)
-            let! _ = withError ("codomain types not equal") noRange (Ty.IsEquiv aCod bCod)
+            let! _ = withError ("domain types not equal") noRange (Ty.IsEquiv aliasEnv aDom bDom)
+            let! _ = withError ("codomain types not equal") noRange (Ty.IsEquiv aliasEnv aCod bCod)
             return ()
         }
     | Capsule(aContents,aq,_), Capsule(bContents,bq,_) ->
@@ -231,24 +324,24 @@ type Ty =
             Error [errorMsg + ": " + aq.ToString() + " is not as strong as " + bq.ToString(), noRange]
         | true ->
             check {
-                let! _ = withError (errorMsg + ": subtyping among content types does not hold") noRange (Ty.IsSubtype aContents bContents)
+                let! _ = withError (errorMsg + ": subtyping among content types does not hold") noRange (Ty.IsSubtype aliasEnv aContents bContents)
                 return ()
             }
     | Prod(aL,aR,_), Prod(bL,bR,_) ->
         check {
-            let! _ = withError (errorMsg + ": left component") noRange (Ty.IsSubtype aL bL)
-            let! _ = withError (errorMsg + ": right component") noRange (Ty.IsSubtype aR bR)
+            let! _ = withError (errorMsg + ": left component") noRange (Ty.IsSubtype aliasEnv aL bL)
+            let! _ = withError (errorMsg + ": right component") noRange (Ty.IsSubtype aliasEnv aR bR)
             return ()
         }
     | Sum(aL,aR,_), Sum(bL,bR,_) ->
         check {
-            let! _ = withError (errorMsg + ": left component") noRange (Ty.IsSubtype aL bL)
-            let! _ = withError (errorMsg + ": right component") noRange (Ty.IsSubtype aR bR)
+            let! _ = withError (errorMsg + ": left component") noRange (Ty.IsSubtype aliasEnv aL bL)
+            let! _ = withError (errorMsg + ": right component") noRange (Ty.IsSubtype aliasEnv aR bR)
             return ()
         }    
     | IVar(aContents, _), IVar(bContents, _) ->
         check {
-            let! _ = withError errorMsg noRange (Ty.IsSubtype aContents bContents)
+            let! _ = withError errorMsg noRange (Ty.IsSubtype aliasEnv aContents bContents)
             return ()
         }
     /// Type abstraction
@@ -258,7 +351,7 @@ type Ty =
             match aKind = bKind with
             | true ->
                 check {
-                    let! _ = withError errorMsg noRange (Ty.IsSubtype aBody bBody)
+                    let! _ = withError errorMsg noRange (Ty.IsSubtype aliasEnv aBody bBody)
                     return ()
                 }
             | false ->
@@ -267,7 +360,7 @@ type Ty =
             Error [errorMsg + ": bound variable " + aId + " distinct from " + bId, noRange]
     | Partial(aTy,_), Partial(bTy,_) ->
         check {
-            let! _ = withError errorMsg noRange (Ty.IsSubtype aTy bTy)
+            let! _ = withError errorMsg noRange (Ty.IsSubtype aliasEnv aTy bTy)
             return ()
         }
     | _ ->
@@ -329,6 +422,8 @@ type Expr =
   | Let of var : string * bound : Expr * body : Expr * Range
   | MLet of var : string * bound : Expr * body : Expr * Range 
   | MRet of expr : Expr * Range
+  | CoeffectAscription of assertions : List<Coeffect * string> * body : Expr * Range
+  | TypeAscription of ty : Ty * body : Expr * Range
 
   override this.ToString() =
     match this with
@@ -384,5 +479,11 @@ type Expr =
         "let [" + var + "] = " + bound.ToString() + " in \n" + body.ToString() + "\nend"
     | MRet(e,_) ->
         "[" + e.ToString() + "]"
+    | CoeffectAscription(assertions, expr, _) ->
+        let contents = List.map (fun (q,x) -> q.ToString() + " " + x) assertions
+        let contents' = String.concat ", " contents
+        "@(" + contents' + ")"
+    | TypeAscription(ty, expr, _) ->
+        "::" + ty.ToString() + " " + expr.ToString()
 
-  type Prog = { typeAliases : Map<string, Ty> ; exprAliases : Map<string,Expr> ; body : Expr }
+  type Prog = { typeAliases : List<string * Ty> ; exprAliases : Map<string,Expr> ; body : Expr }
