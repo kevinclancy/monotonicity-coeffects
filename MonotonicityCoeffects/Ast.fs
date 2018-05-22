@@ -371,7 +371,7 @@ type Ty =
         | TyId(name,_) ->
             name
         | FunTy(dom,q,cod,_) ->
-            "(" + dom.ToString() + " " + q.ToString() + "-> " + cod.ToString() + ")"
+            "(" + dom.ToString() + " ->" + q.ToString() + " " + cod.ToString() + ")"
         | Dictionary(dom,cod,_) ->
             "(" + dom.ToString() + " |> " + cod.ToString() + ")"
         | Capsule(ty,q,_) ->
@@ -402,6 +402,7 @@ type Expr =
   | Var of name : string * Range
   | Bot of ty : Ty * Range
   | Join of ty : Ty * e1 : Expr * e2 : Expr * Range
+  | LessThan of e1 : Expr * e2 : Expr * Range
   /// The eliminator for semilattice dictionaries 
   | Extract of targetTy : Ty * key : string * value : string * acc : string * dict : Expr * body : Expr * Range
   /// The constructor for semilattice dictionaries
@@ -447,6 +448,8 @@ type Expr =
         "(bot " + ty.ToString() + ")"
     | Join(ty,e1,e2,_) ->
         "(join " + ty.ToString() + " " + e1.ToString() + " " + e2.ToString() + ")"
+    | LessThan(e1, e2, _) ->
+        "(" + e1.ToString() + " < " + e2.ToString() + ")"
     | Extract(targetTy,k,v,acc,dict,body,_) ->
         "let cons " + targetTy.ToString() + " " + k + " " + v + " " + acc + " = " + dict.ToString() + " in\n"
           + body.ToString() + "\nend"

@@ -40,37 +40,91 @@ type Term =
     | SumCase of scrutinee : Term * leftCase : Term * rightCase : Term
     | LetRec of funName : string * parName : string * domTy : Ty  * codTy : Ty * body : Term
 
-/// s - the term to substitute
-/// x - the variable to substitute with s
-/// t - the term to substitute s into
-let rec subst (s : Term) (x : string) (t : Term) =
+    override this.ToString() =
+        match this with
+        | Var(n) ->
+            n
+        | Pair(l,r) ->
+            "(" + l.ToString() + ", " + r.ToString() + ")"
+        | Proj1(p) ->
+            "(π1 " + p.ToString() + ")"
+        | Proj2(p) ->
+            "(π2 " + p.ToString() + ")"
+        | In1(t) ->
+            "(κ1 " + t.ToString() + ")"
+        | In2(t) ->
+            "(κ2 " + t.ToString() + ")"
+        | App(fn, arg) ->
+            "(" + fn.ToString() + " " + arg.ToString() + ")"
+        | Abs(id,dom,body) ->
+            "(λ" + id + ":" + dom.ToString() + "." + body.ToString() + ")"
+        | TyApp(forall,arg) ->
+            "(" + forall.ToString() + " !" + arg.ToString() + ")"
+        | Forall(id,body) ->
+            "(Λ" + id + "." + body.ToString() + ")"
+        | PrimFun(name, impl) ->
+            name
+        | PrimNatVal(n) ->
+            n.ToString()
+        | PrimBoolVal(b) ->
+            b.ToString()
+        | PrimUnitVal ->
+            "()"
+        | EmptyList ->
+            "[]"
+        | Cons(hd, rest) ->
+            hd.ToString() + " :: " + rest.ToString() 
+        | BoolCase(scrut,truCase,falseCase) ->
+            "(case " + scrut.ToString() + " with | true -> " + truCase.ToString() + " | false -> " + falseCase.ToString() + ")"
+        | ListCase(scrut, nilCase, conCase) ->
+            "(case " + scrut.ToString() + " with | nil -> " + nilCase.ToString() + " | _ :: _ -> " + conCase.ToString() + ")"
+        | SumCase(scrut, leftCase, rightCase) ->
+            "(case " + scrut.ToString() + " with | κ1 -> " + leftCase.ToString() + " | κ2 -> " + rightCase.ToString() + ")"
+        | LetRec(funName, parName, domTy, codTy, body) ->
+            "(letrec " + funName + " " + parName + " = " + body.ToString() + ")"
+         
+let pcfTrue = In1(PrimUnitVal)
+let pcfFalse = In2(PrimUnitVal)
+let makePcfBool b = if b then In1(PrimUnitVal) else In2(PrimUnitVal)
+
+let (|PCFBool|) (t : P.Term) =
+    match t with
+    | In1(P.PrimUnitVal) ->
+        true
+    | In2(P.PrimUnitVal) ->
+        false
+    | _ ->
+        failwith "This program has 'gone wrong'. Oops."
+
+/// subs - list of variable identifier/term pairs to substitute into t
+/// t - the term to substitute subs into
+let rec subst (subs : List<string * Term>) (t : Term) =
     match t with
     | Var(id) ->
-        if id = x then
+        match List.tryFind (fun (x,s) -> x = id) subs with
+        | Some(_,s) ->
             s
-        else
+        | None ->
             Var(id)
     | Pair(e1, e2) ->
-        Pair(subst s x e1, subst s x e2)
+        Pair(subst subs e1, subst subs e2)
     | Proj1(e) ->
-        Proj1(subst s x e)
+        Proj1(subst subs e)
     | Proj2(e) ->
-        Proj2(subst s x e)
+        Proj2(subst subs e)
     | In1(e) ->
-        In1(subst s x e)
+        In1(subst subs e)
     | In2(e) ->
-        In2(subst s x e)
+        In2(subst subs e)
     | App(fn, arg) ->
-        App(subst s x fn, subst s x arg)
+        App(subst subs fn, subst subs arg)
     | Abs(id, dom, body) ->
-        if x = id then
-            Abs(id, dom, body)
-        else
-            Abs(id, dom, subst s x body)
+        let subs' = List.filter (fun (x,s) -> not (x = id)) subs
+        Abs(id, dom, subst subs' body)
     | TyApp(forall, arg) ->
-        TyApp(subst s x forall, arg)
+        TyApp(subst subs forall, arg)
     | Forall(id, body) ->
-        Forall(id, subst s x body)
+        Forall(id, subst subs body)
     | PrimFun(name, impl) ->
         PrimFun(name, impl)
     | PrimNatVal(n) ->
@@ -82,22 +136,16 @@ let rec subst (s : Term) (x : string) (t : Term) =
     | EmptyList ->
         EmptyList
     | Cons(t1, t2) ->
-        Cons(subst s x t1, subst s x t2)
-    | BBTrue ->
-        BBTrue
-    | BBFalse ->
-        BBFalse
+        Cons(subst subs t1, subst subs t2)
     | BoolCase(scrut, t, f) ->
-        BoolCase(subst s x scrut, subst s x t, subst s x f)
+        BoolCase(subst subs scrut, subst subs t, subst subs f)
     | ListCase(scrut, nil, cons) ->
-        ListCase(subst s x scrut, subst s x nil, subst s x cons)
+        ListCase(subst subs scrut, subst subs nil, subst subs cons)
     | SumCase(scrut, lCase, rCase) ->
-        SumCase(subst s x scrut, subst s x lCase, subst s x rCase)
+        SumCase(subst subs scrut, subst subs lCase, subst subs rCase)
     | LetRec(funName, parName, domTy, codTy, body) ->
-        if parName = x then
-            LetRec(funName, parName, domTy, codTy, body)
-        else
-            LetRec(funName, parName, domTy, codTy, subst s x body)
+        let subs' = List.filter (fun (x,s) -> not (x = funName || x = parName)) subs
+        LetRec(funName, parName, domTy, codTy, subst subs' body)
 
 let rec tySubstTy (a : Ty) (x : string) (b : Ty) =
     match b with
@@ -174,6 +222,7 @@ let rec tySubstTerm (ty : Ty) (x : string) (t : Term) =
         LetRec(funName, parName, domTy, codTy, tySubstTerm ty x body)
 
 let rec step (t : Term) : Option<Term> =
+    printf "stepping term\n"
     match t with
     | Var(_) ->
         None
@@ -232,13 +281,13 @@ let rec step (t : Term) : Option<Term> =
                 | PrimFun(name, impl) ->
                     Some(impl arg)
                 | Abs(id,dom,body) ->
-                    Some(subst arg id body)
+                    Some(subst [(id, arg)] body)
                 | LetRec(funName, parName, domTy, codTy, body) ->
                     match arg with
                     | Cons(_,_)
                     | EmptyList ->
                         let f = LetRec(funName,parName,domTy,codTy,body)
-                        Some(subst f funName (subst arg parName body))
+                        Some(subst [(funName,f);(parName,arg)] body)
                     | _ ->
                         None
                 | _ ->
@@ -310,3 +359,10 @@ let rec step (t : Term) : Option<Term> =
                 Some(App(rCase,e)) 
             | _ ->
                 failwith "this program 'went wrong'. oops."
+
+let rec normalize (t : Term) =
+    match step t with
+    | Some(t') ->
+        normalize t'
+    | None ->
+        t

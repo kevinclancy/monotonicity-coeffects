@@ -1,0 +1,68 @@
+﻿types
+  Bag = typefun (x : TOSET) x |> Nat end;
+  MultiRel = typefun (src : TOSET) (dst : TOSET) (src * dst) |> Nat end;
+in
+
+let equal =
+
+	fun (A : TOSET) (x : A) (y : A)
+		(bAnd 
+		  (bNot (x < y)) 
+		  (bNot (y < x)))
+	end
+
+and monoIf = 
+
+  fun (src : SEMILATTICE) (dest : SEMILATTICE) (cond : src) (res : dest)
+      let extract to dest with k v acc = cons unit cond (bot (Unit |> src)) in
+		res
+      end
+  end
+
+and map =
+
+	fun (srcElem : TOSET) (destElem : TOSET) 
+		(f : srcElem ->? destElem)
+		(bag : Bag srcElem) :: (Bag destElem) @(+ bag)
+		let extract to (Bag destElem) with e m acc = bag
+		in (cons (f e) m acc) 
+		end
+	end
+
+and filter =
+
+  fun (elemTy : TOSET) (f : elemTy ->? Nat ->+ Bool) (bag : Bag elemTy)
+      :: (Bag elemTy) @(+ f, + bag)
+		let extract to (Bag elemTy) with e m acc = bag
+		and m2 = (monoIf !Bool !Nat (f e m) m)
+		in (cons e m2 acc)  
+		end	
+  end
+
+and comp =
+	fun (A : TOSET) (B : TOSET) (C : TOSET)
+		(x : MultiRel A B) (y : MultiRel B C)
+		
+		let extract to (MultiRel A C) with ab m1 acc1 = x in
+			let resAB = 
+				let extract to (MultiRel A C) with bc m2 acc2 = y
+				and a = fst ab
+				and b1 = snd ab
+				and b2 = fst bc
+				and c = snd bc
+				and m3 = (monoIf !Bool !Nat (equal !B b1 b2) (mult m1 m2))
+				in (cons (a,c) m3 acc2)
+				end
+			in
+				(join (MultiRel A C) resAB acc1)
+			end
+		end
+
+	end
+
+in
+	(comp !Nat !Nat !Nat
+	      { (1,3) -> 2, (2,3) -> 4  : (MultiRel Nat Nat) } 
+	      { (3,2) -> 5 : (MultiRel Nat Nat) })
+end
+

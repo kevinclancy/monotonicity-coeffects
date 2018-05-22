@@ -11,7 +11,8 @@ open System.Reflection.Metadata
 module P = PCF
 
 type ValueEnvironment = Map<string, Ty>
-type Context = { tenv : TypeEnvironment ; venv : ValueEnvironment }
+type PrimValueEnvironment = Map<string, Ty * P.Term>
+type Context = { tenv : TypeEnvironment ; venv : ValueEnvironment ; bvenv : PrimValueEnvironment }
 
 type CoeffectMap = Map<string, Coeffect>
 
@@ -129,7 +130,11 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let nameOnlyMono = Map.map (fun k v -> if k = name then Coeffect.Use else Coeffect.Ign) venv
             Result (ty, nameOnlyMono, P.Var(name)) 
         | None ->
-            Error [errorMsg + ": identifier " + name.ToString() + " undeclared",rng]
+            match ctxt.bvenv.TryFind name with
+            | Some(ty, pTerm) ->
+                Result (ty, Map.map (fun k _ -> Coeffect.Ign) venv, pTerm)
+            | _ ->
+                Error [errorMsg + ": identifier " + name.ToString() + " undeclared",rng]
     | Bot(ty,rng) ->
         check {
             let! _, pBot, _ = withError errorMsg rng (kCheckSemilattice tenv ty)
@@ -145,6 +150,15 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             do! withError errorMsg rng (Ty.IsEquiv ctxt.tenv.tyAliasEnv ty2 ty)
             let term = P.App(P.App(pJoin, pTerm1), pTerm2)
             return ty, contr qs1 qs2, term
+        }
+    | LessThan(e1, e2, rng) ->
+        check {
+            let! ty1, Q1, pTerm1 = withError errorMsg rng (typeCheck ctxt e1)
+            let! _, pLessThan = withError errorMsg rng (kCheckToset ctxt.tenv ty1)
+            let! ty2, Q2, pTerm2 = withError errorMsg rng (typeCheck ctxt e2)
+            do! withError (errorMsg + ": left operand type does not match that of right operand type") rng (Ty.IsEquiv ctxt.tenv.tyAliasEnv ty2 ty1)
+            let term = P.App(P.App(pLessThan, pTerm1), pTerm2)
+            return TyId("Bool", noRange), contr (comp CoeffectAntitone Q1) Q2, term
         }
     | Extract(targetTy, key, value, acc, dict, body, rng) ->
         check {
@@ -187,7 +201,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                             P.Var("!d"),
                             pTargetBot,
                             P.Abs("!h",  pElemTy, P.Abs("!t", pDictTy, 
-                                P.App(P.App(pTargetJoin, pIncTerm), P.App(P.App(P.Var("!f"), P.Var("t")), pIncTerm)))))))
+                                P.App(P.App(pTargetJoin, pIncTerm), P.App(P.App(P.Var("!f"), P.Var("!t")), pIncTerm)))))))
             let pResTerm = P.App(P.App(pElim , pDictTerm), pTargetBot)
             return (targetTy, resQ, pResTerm)
         }
@@ -403,7 +417,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
 // type ValueEnvironment = Map<string, Ty>
 // type Context = { tenv : TypeEnvironment ; venv : ValueEnvironment }
 
-let progCheck (ctxt : Context) (p : Prog) : Check<Ty * CoeffectMap> = 
+let progCheck (ctxt : Context) (p : Prog) : Check<Ty * CoeffectMap * P.Term> = 
     let foldAlias (acc : Check<TypeEnvironment>) ((n,ty) : string * Ty) =
         match acc with
         | Error(stack) ->
@@ -419,5 +433,5 @@ let progCheck (ctxt : Context) (p : Prog) : Check<Ty * CoeffectMap> =
         let tenvCheck = Result ctxt.tenv
         let! tenv = List.fold foldAlias tenvCheck p.typeAliases
         let! ty,R,pTerm = typeCheck { ctxt with tenv = tenv } p.body
-        return ty,R
+        return ty,R,pTerm
     }

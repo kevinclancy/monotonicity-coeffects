@@ -30,7 +30,7 @@ rule token = parse
 | "with"         { WITH }
 | "forall"       { FORALL }
 | "Forall"       { BIGFORALL }
-| "TypeFun"      { TYPEFUN }
+| "typefun"      { TYPEFUN }
 | ":"            { COLON }
 | "::"			 { COLONS }
 | ";"            { SEMICOLON }
@@ -49,6 +49,7 @@ rule token = parse
 | "["            { LSQUAREBRACKET }
 | "]"            { RSQUAREBRACKET }
 | "|>"           { DICT }
+| "<"            { LESSTHAN }
 | "#"            { HASH }
 | "|"            { PIPE }
 | "case"		 { CASE }

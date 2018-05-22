@@ -536,7 +536,6 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                 | false -> 
                     Error ["kind " + kArg.ToString() + " of type argument " + argTy.ToString() + " does not match expected kind " + opDom.ToString(), rng]
             // compute semantics
-            let! normSynth = kSynth tenv (Ty.normalize(tenv.tyAliasEnv, ty))
-            let! normTy, normToset, normSemi = getProper "normalized application" normSynth
-            return KProper(normTy, normToset, normSemi, noRange)
+            let! k = kSynth tenv (Ty.normalize(tenv.tyAliasEnv, ty))
+            return k
         }

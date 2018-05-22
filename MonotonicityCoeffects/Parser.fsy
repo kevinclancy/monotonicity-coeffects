@@ -15,7 +15,7 @@ open Ast
 %token AT DOT PLUS MINUS QUESTION ASTERISK LPAREN RPAREN IN LET END EOF FST SND COMMA OF CASE 
 %token INL INR TO CAP UNCAP PIPE TYPES SEMICOLON LBRACK RBRACK BANG
 %token HASH DICT TOSET POSET SEMILATTICE FORALL BIGFORALL IMPLIES ARROW
-%token LSQUAREBRACKET RSQUAREBRACKET LARROW AND TYPEFUN COLONS WITH
+%token LSQUAREBRACKET RSQUAREBRACKET LARROW AND TYPEFUN COLONS WITH LESSTHAN
 
 %right ARROW DICT PLUS ASTERISK IMPLIES
 
@@ -45,6 +45,12 @@ LetList : ID EQUAL Expr IN Expr END { Let($1,$3,$5, parseState.ResultRange) }
 		| CAP Scalar ID EQUAL Expr IN Expr END { Uncap($2,$3,$5,$7, parseState.ResultRange) }
 		| CAP Scalar ID EQUAL Expr AND LetList { Uncap($2,$3,$5,$7, parseState.ResultRange) }
 
+ForallParList : LPAREN ID COLON ProperKindPrime RPAREN ForallParList { ForallTy($2,$4,$6, parseState.ResultRange) }
+              | Ty { $1 }
+
+TypeParList : LPAREN ID COLON ProperKindPrime RPAREN TypeParList { TyOp($2,$4,$6, parseState.ResultRange) }
+            | Ty { $1 }
+
 ParList : LPAREN ID COLON TyList RPAREN ParList { Abs($2,$4,$6,parseState.ResultRange) }
         | LPAREN ID COLON ProperKindPrime RPAREN ParList { Forall($2,$4,$6, parseState.ResultRange) }
 		| Expr { $1 }
@@ -65,6 +71,7 @@ Expr: INT                        { Int($1, parseState.ResultRange) }
 	| ID { Var($1, parseState.ResultRange) }
 	| LPAREN BOT Ty RPAREN { Bot($3, parseState.ResultRange) }
 	| JOIN Ty Expr Expr { Join($2, $3, $4, parseState.ResultRange) }
+	| LPAREN Expr LESSTHAN Expr RPAREN { LessThan($2,$4,parseState.ResultRange) }
 	| CONS Expr Expr Expr { Cons($2, $3, $4, parseState.ResultRange) }
 	| FST Expr { Fst($2, parseState.ResultRange) }
 	| SND Expr { Snd($2, parseState.ResultRange) }
@@ -98,6 +105,6 @@ Ty: LPAREN Ty Scalar RPAREN { Capsule($2, $3, parseState.ResultRange) }
   | PIPE Ty PIPE { IVar($2, parseState.ResultRange) }
   | LSQUAREBRACKET Ty RSQUAREBRACKET { Partial($2, parseState.ResultRange) }
   | ID { TyId($1, parseState.ResultRange) }
-  | LPAREN BIGFORALL ID COLON ProperKindPrime DOT Ty RPAREN { ForallTy($3,$5,$7, parseState.ResultRange) }
-  | LPAREN TYPEFUN ID COLON ProperKindPrime DOT Ty RPAREN { TyOp($3,$5,$7, parseState.ResultRange) }
+  | BIGFORALL ForallParList END { $2 }
+  | TYPEFUN TypeParList END { $2 }
   | LPAREN TyList RPAREN { $2 } 
