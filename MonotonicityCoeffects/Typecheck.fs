@@ -58,7 +58,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 | Poset ->
                     P.Forall("$" + tyVarId, term)
                 | Toset ->
-                    P.Forall("$" + tyVarId, P.Abs("$" + tyVarId + "_comp", P.Fun(pTyVar, P.Fun(pTyVar, P.BB)), term))
+                    P.Forall("$" + tyVarId, P.Abs("$" + tyVarId + "_comp", P.Fun(pTyVar, P.Fun(pTyVar, P.pBoolTy)), term))
                 | Semilattice ->
                      P.Forall("$" + tyVarId,
                         P.Abs("$" + tyVarId + "_bot", pTyVar, 
@@ -196,7 +196,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let pDictTy = P.List pElemTy
             let pIncTerm = P.App(P.App(P.App(pBodyFun, P.Proj1(P.Var("!h"))), P.Proj2(P.Var("!h"))), P.Var("!acc"))
             let pElim = 
-                P.LetRec("!f", "!d", pDictTy, pTargetTy, P.Abs("!acc", pTargetTy,
+                P.LetRec("!f", "!d", pDictTy, P.Fun(pTargetTy, pTargetTy), P.Abs("!acc", pTargetTy,
                         P.ListCase(
                             P.Var("!d"),
                             pTargetBot,

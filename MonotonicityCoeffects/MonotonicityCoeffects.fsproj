@@ -18,12 +18,15 @@
     
   </ItemGroup>
 
+  <ItemGroup />
+
   <ItemGroup>
     <None Include="Lexer.fsl" />
     <None Include="Datafun.tb" />
     <None Include="MonotoneCart.tb" />
     <None Include="test.tb" />
     <None Include="Parser.fsy" />
+    <Content Include="scratch.txt" />
   </ItemGroup>
 
   <ItemGroup>

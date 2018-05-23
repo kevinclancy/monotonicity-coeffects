@@ -5,7 +5,6 @@ open System.Reflection.Metadata.Ecma335
 
 type Ty =
     | Unit
-    | BB // discrete boolean
     | List of elemTy : Ty 
     | Prod of lTy : Ty * rTy : Ty
     | Sum of lTy : Ty * rTy : Ty
@@ -13,6 +12,26 @@ type Ty =
     | Prim of name : string // semilattice primitives: unit, bool, nat
     | TyVar of name : string
     | ForallTy of id : string * body : Ty
+
+    override this.ToString() =
+        match this with
+        | Unit ->
+            "Unit"
+        | List(elemTy) ->
+            "List[" + elemTy.ToString() + "]"
+        | Prod(lTy, rTy) ->
+            lTy.ToString() + "*" + rTy.ToString()
+        | Sum(lTy, rTy) ->
+            lTy.ToString() + "+" + rTy.ToString()
+        | Fun(dom,cod) ->
+            dom.ToString() + " -> " + cod.ToString()
+        | Prim(name) ->
+            name
+        | TyVar(name) ->
+            name
+        | ForallTy(id, body) ->
+            "(Forall " + id + "." + body.ToString() + ")"
+
 
 type Term =
     | Var of name : string
@@ -45,17 +64,17 @@ type Term =
         | Proj2(p) ->
             "(π2 " + p.ToString() + ")"
         | In1(_,_,t) ->
-            "(κ1 " + t.ToString() + ")"
+            "(i1 " + t.ToString() + ")"
         | In2(_,_,t) ->
-            "(κ2 " + t.ToString() + ")"
+            "(i2 " + t.ToString() + ")"
         | App(fn, arg) ->
             "(" + fn.ToString() + " " + arg.ToString() + ")"
         | Abs(id,dom,body) ->
-            "(λ" + id + ":" + dom.ToString() + "." + body.ToString() + ")"
+            "(fn " + id + ":" + dom.ToString() + "." + body.ToString() + ")"
         | TyApp(forall,arg) ->
             "(" + forall.ToString() + " !" + arg.ToString() + ")"
         | Forall(id,body) ->
-            "(Λ" + id + "." + body.ToString() + ")"
+            "(tf " + id + "." + body.ToString() + ")"
         | PrimFun(name, domTy, codTy, impl) ->
             name
         | PrimNatVal(n) ->
@@ -139,8 +158,6 @@ let rec tySubstTy (a : Ty) (x : string) (b : Ty) =
     match b with
     | Unit ->
         Unit
-    | BB -> 
-        BB
     | List(elemTy) ->
         List(tySubstTy a x elemTy)
     | Prod(lTy, rTy) ->
@@ -202,7 +219,6 @@ let rec tySubstTerm (ty : Ty) (x : string) (t : Term) =
         LetRec(funName, parName, domTy, codTy, tySubstTerm ty x body)
 
 let rec step (t : Term) : Option<Term> =
-    printf "stepping term\n"
     match t with
     | Var(_) ->
         None
@@ -315,7 +331,7 @@ let rec step (t : Term) : Option<Term> =
     | SumCase(scrut, lCase, rCase) ->
         match step scrut with
         | Some(scrut') ->
-            Some(ListCase(scrut', lCase, rCase))
+            Some(SumCase(scrut', lCase, rCase))
         | None ->
             match scrut with
             | In1(_, _, e) ->
@@ -403,7 +419,7 @@ let rec typeCheck (ctxt : Context) (t : Term) : Check<Ty> =
                 | Fun(dom, cod) ->
                     Result (dom, cod)
                 | _ ->
-                    err "expected function type in argument position"
+                    err "expected function type in function position"
             let! tyArg = w errorMsg (typeCheck ctxt arg)
             do! 
                 match tyDom = tyArg with
@@ -475,7 +491,7 @@ let rec typeCheck (ctxt : Context) (t : Term) : Check<Ty> =
             let! consCaseTy = w errorMsg (typeCheck ctxt consCase)
             let! resTy =
                 match consCaseTy with
-                | Fun(headTy,Fun(tailTy,resTy)) when headTy = elemTy && tailTy = elemTy ->
+                | Fun(headTy,Fun(tailTy,resTy)) when headTy = elemTy && tailTy = scrutTy ->
                     Result resTy
                 | _ ->
                     err ("tail case expected to have type " + elemTy.ToString() + " -> " + scrutTy.ToString() + " -> " + nilCaseTy.ToString() + " but instead computed " + consCaseTy.ToString())

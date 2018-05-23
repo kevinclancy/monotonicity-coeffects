@@ -42,7 +42,7 @@ type Range = Position * Position
  let makeDictionarySemilat (pDomTy : P.Ty) (pCodTy : P.Ty) (pDomComp : P.Term) (jCod : P.Term) 
                            : P.Ty * P.Term * P.Term =
     let resTy = P.List (P.Prod(pDomTy, pCodTy))
-    let elemTy = pCodTy
+    let elemTy = P.Prod(pDomTy, pCodTy)
     resTy,
     P.EmptyList(elemTy),
     P.LetRec("!f", "!x", resTy, P.Fun(resTy,resTy), P.Abs("!y", resTy, 

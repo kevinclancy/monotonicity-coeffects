@@ -286,8 +286,8 @@ let main argv =
                 q.ToString() + " " + id
             let stringEntriesR = (Map.toList (Map.map mapCoeffectEntry R))
             let stringR = String.concat ", " (List.map (fun (_,v) -> v) stringEntriesR)
-            //let result = normalize pTerm
-            printf "Successfully checked program.\nType: %s\nCoeffect: %s" (ty.ToString()) stringR
+            let result = normalize pTerm
+            printf "Successfully checked program.\nType: %s\nCoeffect: %s\nValue: %s\n" (ty.ToString()) stringR (result.ToString())
         0 // return an integer exit code
     with 
     | :? IndexOutOfRangeException ->
