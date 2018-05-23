@@ -119,15 +119,6 @@ let hasKind (k : Kind) (p : ProperKind) =
     | KOperator(_,_,_) ->
         false
 
-let noPos : Position = {
-    pos_fname = ""
-    pos_lnum = 0
-    pos_bol = 0
-    pos_cnum = 0
-}
-
-let noRange = (noPos, noPos)
-
 type SubtypeResult =
     | Success
     | Failure of List<string>

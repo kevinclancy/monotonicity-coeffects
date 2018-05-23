@@ -5,7 +5,16 @@
 open Microsoft.FSharp.Text.Lexing
 
 type Range = Position * Position
-    
+
+let noPos : Position = {
+    pos_fname = ""
+    pos_lnum = 0
+    pos_bol = 0
+    pos_cnum = 0
+}
+
+let noRange = (noPos, noPos)
+
 type Check<'A> =
     | Error of List<string * Range>
     // | ValidPendingError of msg : string * rng : Range

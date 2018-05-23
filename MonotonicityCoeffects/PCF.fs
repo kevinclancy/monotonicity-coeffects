@@ -1,9 +1,7 @@
 ﻿module PCF
 
-open System.Threading.Tasks.Dataflow
-open System.Runtime.InteropServices.ComTypes
-open System.Reflection.Metadata
-open System
+open CheckComputation
+open System.Reflection.Metadata.Ecma335
 
 type Ty =
     | Unit
@@ -21,21 +19,17 @@ type Term =
     | Pair of l : Term * r : Term
     | Proj1 of Term
     | Proj2 of Term
-    | In1 of Term
-    | In2 of Term
+    | In1 of Ty * Ty * Term
+    | In2 of Ty * Ty * Term
     | App of fn : Term * arg : Term
     | Abs of id : string * dom : Ty * body : Term
     | TyApp of forall : Term * arg : Ty
     | Forall of id : string * body : Term
-    | PrimFun of name : string * impl : (Term -> Term)
+    | PrimFun of name : string * domTy : Ty * codTy : Ty * impl : (Term -> Term)
     | PrimNatVal of int
-    | PrimBoolVal of bool 
     | PrimUnitVal
-    | EmptyList
+    | EmptyList of elemTy : Ty
     | Cons of head : Term * rest : Term
-    | BBTrue
-    | BBFalse
-    | BoolCase of scrutinee : Term * trueCase : Term * falseCase : Term
     | ListCase of scrutinee : Term * nilCase : Term * consCase : Term
     | SumCase of scrutinee : Term * leftCase : Term * rightCase : Term
     | LetRec of funName : string * parName : string * domTy : Ty  * codTy : Ty * body : Term
@@ -50,9 +44,9 @@ type Term =
             "(π1 " + p.ToString() + ")"
         | Proj2(p) ->
             "(π2 " + p.ToString() + ")"
-        | In1(t) ->
+        | In1(_,_,t) ->
             "(κ1 " + t.ToString() + ")"
-        | In2(t) ->
+        | In2(_,_,t) ->
             "(κ2 " + t.ToString() + ")"
         | App(fn, arg) ->
             "(" + fn.ToString() + " " + arg.ToString() + ")"
@@ -62,20 +56,16 @@ type Term =
             "(" + forall.ToString() + " !" + arg.ToString() + ")"
         | Forall(id,body) ->
             "(Λ" + id + "." + body.ToString() + ")"
-        | PrimFun(name, impl) ->
+        | PrimFun(name, domTy, codTy, impl) ->
             name
         | PrimNatVal(n) ->
             n.ToString()
-        | PrimBoolVal(b) ->
-            b.ToString()
         | PrimUnitVal ->
             "()"
-        | EmptyList ->
+        | EmptyList(_) ->
             "[]"
         | Cons(hd, rest) ->
             hd.ToString() + " :: " + rest.ToString() 
-        | BoolCase(scrut,truCase,falseCase) ->
-            "(case " + scrut.ToString() + " with | true -> " + truCase.ToString() + " | false -> " + falseCase.ToString() + ")"
         | ListCase(scrut, nilCase, conCase) ->
             "(case " + scrut.ToString() + " with | nil -> " + nilCase.ToString() + " | _ :: _ -> " + conCase.ToString() + ")"
         | SumCase(scrut, leftCase, rightCase) ->
@@ -83,15 +73,17 @@ type Term =
         | LetRec(funName, parName, domTy, codTy, body) ->
             "(letrec " + funName + " " + parName + " = " + body.ToString() + ")"
          
-let pcfTrue = In1(PrimUnitVal)
-let pcfFalse = In2(PrimUnitVal)
-let makePcfBool b = if b then In1(PrimUnitVal) else In2(PrimUnitVal)
+let pcfTrue = In1(Unit,Unit,PrimUnitVal)
+let pcfFalse = In2(Unit,Unit,PrimUnitVal)
+let makePcfBool b = if b then In1(Unit,Unit,PrimUnitVal) else In2(Unit,Unit,PrimUnitVal)
+let pBoolTy = Sum(Unit,Unit)
+let pUnitTy = Unit
 
-let (|PCFBool|) (t : P.Term) =
+let (|PCFBool|) (t : Term) =
     match t with
-    | In1(P.PrimUnitVal) ->
+    | In1(Unit,Unit,PrimUnitVal) ->
         true
-    | In2(P.PrimUnitVal) ->
+    | In2(Unit,Unit,PrimUnitVal) ->
         false
     | _ ->
         failwith "This program has 'gone wrong'. Oops."
@@ -112,10 +104,10 @@ let rec subst (subs : List<string * Term>) (t : Term) =
         Proj1(subst subs e)
     | Proj2(e) ->
         Proj2(subst subs e)
-    | In1(e) ->
-        In1(subst subs e)
-    | In2(e) ->
-        In2(subst subs e)
+    | In1(ty1, ty2, e) ->
+        In1(ty1, ty2, subst subs e)
+    | In2(ty1, ty2, e) ->
+        In2(ty1, ty2, subst subs e)
     | App(fn, arg) ->
         App(subst subs fn, subst subs arg)
     | Abs(id, dom, body) ->
@@ -125,20 +117,16 @@ let rec subst (subs : List<string * Term>) (t : Term) =
         TyApp(subst subs forall, arg)
     | Forall(id, body) ->
         Forall(id, subst subs body)
-    | PrimFun(name, impl) ->
-        PrimFun(name, impl)
+    | PrimFun(name, domTy, codTy, impl) ->
+        PrimFun(name, domTy, codTy, impl)
     | PrimNatVal(n) ->
         PrimNatVal(n)
-    | PrimBoolVal(b) ->
-        PrimBoolVal(b)
     | PrimUnitVal ->
         PrimUnitVal
-    | EmptyList ->
-        EmptyList
+    | EmptyList(elemTy) ->
+        EmptyList(elemTy)
     | Cons(t1, t2) ->
         Cons(subst subs t1, subst subs t2)
-    | BoolCase(scrut, t, f) ->
-        BoolCase(subst subs scrut, subst subs t, subst subs f)
     | ListCase(scrut, nil, cons) ->
         ListCase(subst subs scrut, subst subs nil, subst subs cons)
     | SumCase(scrut, lCase, rCase) ->
@@ -184,10 +172,10 @@ let rec tySubstTerm (ty : Ty) (x : string) (t : Term) =
         Proj1(tySubstTerm ty x e)
     | Proj2(e) ->
         Proj2(tySubstTerm ty x e)
-    | In1(e) ->
-        In1(tySubstTerm ty x e)
-    | In2(e) ->
-        In2(tySubstTerm ty x e)
+    | In1(ty1, ty2, e) ->
+        In1(tySubstTy ty x ty1, tySubstTy ty x ty2, tySubstTerm ty x e)
+    | In2(ty1, ty2, e) ->
+        In2(tySubstTy ty x ty1, tySubstTy ty x ty2, tySubstTerm ty x e)
     | App(fn, arg) ->
         App(tySubstTerm ty x fn, tySubstTerm ty x arg)
     | Abs(id, dom, body) ->
@@ -196,24 +184,16 @@ let rec tySubstTerm (ty : Ty) (x : string) (t : Term) =
         TyApp(tySubstTerm ty x forall, arg)
     | Forall(id, body) ->
         Forall(id, tySubstTerm ty x body)
-    | PrimFun(name, impl) ->
-        PrimFun(name, impl)
+    | PrimFun(name, domTy, codTy, impl) ->
+        PrimFun(name, domTy, codTy, impl)
     | PrimNatVal(n) ->
         PrimNatVal(n)
-    | PrimBoolVal(b) ->
-        PrimBoolVal(b)
     | PrimUnitVal ->
         PrimUnitVal
-    | EmptyList ->
-        EmptyList
+    | EmptyList(elemTy) ->
+        EmptyList(tySubstTy ty x elemTy)
     | Cons(t1, t2) ->
         Cons(tySubstTerm ty x t1, tySubstTerm ty x t2)
-    | BBTrue ->
-        BBTrue
-    | BBFalse ->
-        BBFalse
-    | BoolCase(scrut, t, f) ->
-        BoolCase(tySubstTerm ty x scrut, tySubstTerm ty x t, tySubstTerm ty x f)
     | ListCase(scrut, nil, cons) ->
         ListCase(tySubstTerm ty x scrut, tySubstTerm ty x nil, tySubstTerm ty x cons)
     | SumCase(scrut, lCase, rCase) ->
@@ -256,16 +236,16 @@ let rec step (t : Term) : Option<Term> =
                 Some(e2)
             | _ ->
                 None
-    | In1(e) ->
+    | In1(ty1, ty2, e) ->
         match step e with
         | Some(e') ->
-            Some(In1(e'))
+            Some(In1(ty1, ty2, e'))
         | None ->
             None
-    | In2(e) ->
+    | In2(ty1, ty2, e) ->
         match step e with
         | Some(e') ->
-            Some(In1(e'))
+            Some(In1(ty1, ty2, e'))
         | None ->
             None
     | App(fn, arg) ->
@@ -278,14 +258,14 @@ let rec step (t : Term) : Option<Term> =
                 Some(App(fn,arg'))
             | None ->
                 match fn with
-                | PrimFun(name, impl) ->
+                | PrimFun(name, domTy, codTy, impl) ->
                     Some(impl arg)
                 | Abs(id,dom,body) ->
                     Some(subst [(id, arg)] body)
                 | LetRec(funName, parName, domTy, codTy, body) ->
                     match arg with
                     | Cons(_,_)
-                    | EmptyList ->
+                    | EmptyList(_) ->
                         let f = LetRec(funName,parName,domTy,codTy,body)
                         Some(subst [(funName,f);(parName,arg)] body)
                     | _ ->
@@ -302,16 +282,13 @@ let rec step (t : Term) : Option<Term> =
                 Some(tySubstTerm arg id body)
             | _ ->
                 failwith "This program 'went wrong'. Oops."
-    | PrimFun(_, _)
+    | PrimFun(_,_,_,_)
     | PrimNatVal(_)
-    | PrimBoolVal(_)
     | PrimUnitVal
-    | EmptyList 
+    | EmptyList(_) 
     | Forall(_,_)
     | Abs(_,_,_)
-    | LetRec(_,_,_,_,_) 
-    | BBTrue 
-    | BBFalse ->
+    | LetRec(_,_,_,_,_) ->
         None        
     | Cons(e1,e2) ->
         match step e1 with
@@ -323,25 +300,13 @@ let rec step (t : Term) : Option<Term> =
                 Some(Cons(e1,e2'))
             | None ->
                 None
-    | BoolCase(scrut, tcase, fcase) ->
-        match step scrut with
-        | Some(scrut') ->
-            Some(BoolCase(scrut', tcase, fcase))
-        | None ->
-            match scrut with
-            | BBTrue ->
-                Some(tcase)
-            | BBFalse ->
-                Some(fcase)
-            | _ ->
-                failwith "this program 'went wrong'. oops."
     | ListCase(scrut, nilCase, consCase) ->
         match step scrut with
         | Some(scrut') ->
             Some(ListCase(scrut', nilCase, consCase))
         | None ->
             match scrut with
-            | EmptyList ->
+            | EmptyList(_) ->
                 Some(nilCase)
             | Cons(head, tail) ->
                 Some(App(App(consCase, head), tail)) 
@@ -353,9 +318,9 @@ let rec step (t : Term) : Option<Term> =
             Some(ListCase(scrut', lCase, rCase))
         | None ->
             match scrut with
-            | In1(e) ->
+            | In1(_, _, e) ->
                 Some(App(lCase,e))
-            | In2(e) ->
+            | In2(_, _, e) ->
                 Some(App(rCase,e)) 
             | _ ->
                 failwith "this program 'went wrong'. oops."
@@ -366,3 +331,191 @@ let rec normalize (t : Term) =
         normalize t'
     | None ->
         t
+
+type Context = { venv : Map<string,Ty> ; tenv : Set<string> }
+
+let rec typeCheck (ctxt : Context) (t : Term) : Check<Ty> =
+    let errorMsg = "type error in term " + t.ToString() + ": "
+    let w (msg : string) = withError msg noRange
+    let err (msg : string) = Error [errorMsg + msg,noRange]
+    match t with
+    | Var(name) ->
+        match ctxt.venv.TryFind(name) with
+        | Some(ty) ->
+            Result ty
+        | None ->
+            Error [("variable " + name + " not found", noRange)]
+    | Pair(l, r) ->
+        check {
+            let! tyL = w errorMsg (typeCheck ctxt l)
+            let! tyR = w errorMsg (typeCheck ctxt r)
+            return Prod(tyL, tyR)
+        }
+    | Proj1(t) ->
+        check {
+            let! ty = w errorMsg (typeCheck ctxt t)
+            let! tyL = 
+                match ty with
+                | Prod(tyL, _) ->
+                    Result tyL
+                | _ ->
+                    err (": expected pair type, but computed " + ty.ToString())
+            return tyL
+        }
+    | Proj2(t) ->
+        check {
+            let! ty = w errorMsg (typeCheck ctxt t)
+            let! tyR = 
+                match ty with
+                | Prod(_, tyR) ->
+                    Result tyR
+                | _ ->
+                    err (": expected pair type, but computed " + ty.ToString())
+            return tyR
+        }
+    | In1(ty1,ty2,t) ->
+        check {
+            let! ty = w errorMsg (typeCheck ctxt t)
+            do!
+                match ty = ty1 with
+                | true -> 
+                    Result ()
+                | false ->
+                    err (": ascripted type " + ty1.ToString() + "does not match computed type " + ty.ToString())
+            return Sum(ty1,ty2)
+        }
+    | In2(ty1, ty2, t) ->
+        check {
+            let! ty = w errorMsg (typeCheck ctxt t)
+            do!
+                match ty = ty2 with
+                | true -> 
+                    Result ()
+                | false ->
+                    err ("ascripted type " + ty2.ToString() + "does not match computed type " + ty.ToString())
+            return Sum(ty1,ty2)
+        }     
+    | App(fn, arg) ->
+        check {
+            let! tyFn = w errorMsg (typeCheck ctxt fn)
+            let! tyDom, tyCod =
+                match tyFn with
+                | Fun(dom, cod) ->
+                    Result (dom, cod)
+                | _ ->
+                    err "expected function type in argument position"
+            let! tyArg = w errorMsg (typeCheck ctxt arg)
+            do! 
+                match tyDom = tyArg with
+                | true ->
+                    Result ()
+                | false ->
+                    err ("domain type " + tyDom.ToString() + " does not match argument type " + tyArg.ToString())
+            return tyCod
+        }
+    | Abs(id,domTy,body) ->
+        check {
+            let ctxt' = { ctxt with venv = ctxt.venv.Add(id,domTy) }
+            let! codTy = w errorMsg (typeCheck ctxt' body)
+            return Fun(domTy, codTy)
+        }
+    | TyApp(forall, argTy) ->
+        check {
+            let! forallTy = w errorMsg (typeCheck ctxt forall)
+            let! tyId,tyBody = 
+                match forallTy with
+                | ForallTy(id, body) ->
+                    Result (id,body)
+                | _ ->
+                    err ("forall type expected in function position of type application, but computed " + forallTy.ToString())
+            return (tySubstTy argTy tyId tyBody)
+        }
+    | Forall(id, body) ->
+        check {
+            let ctxt' = { ctxt with tenv = ctxt.tenv.Add(id) }
+            let! tyBody = w errorMsg (typeCheck ctxt' body)
+            return ForallTy(id, tyBody)
+        }
+    | PrimFun(name, domTy, codTy, impl) ->
+        Result (Fun(domTy, codTy))
+    | PrimNatVal(n) ->
+        Result (Prim("Nat"))
+    | PrimUnitVal ->
+        Result (pUnitTy)
+    | EmptyList(elemTy) ->
+        Result (List(elemTy))
+    | Cons(head, rest) ->
+        check {
+            let! restTy = w errorMsg (typeCheck ctxt rest)
+            let! headTy = w errorMsg (typeCheck ctxt head)
+            let! elemTy =
+                match restTy with
+                | List(elemTy) ->
+                    Result(elemTy)
+                | _ ->
+                    err ("expected cons tail " + rest.ToString() + " to have a list type, but " + restTy.ToString() + " computed")
+            do! 
+                match elemTy = headTy with
+                | true ->
+                    Result ()
+                | false ->
+                    err ("List element type " + elemTy.ToString() + " does not match cons head type " + headTy.ToString())
+            return restTy
+        }
+    | ListCase(scrut, nilCase, consCase) ->
+        check {
+            let! scrutTy = w errorMsg (typeCheck ctxt scrut)
+            let! elemTy =
+                match scrutTy with
+                | List(elemTy) ->
+                    Result elemTy
+                | _ ->
+                    err ("scrutinee expected to have list type but instead has type " + scrutTy.ToString())
+            let! nilCaseTy = w errorMsg (typeCheck ctxt nilCase)
+            let! consCaseTy = w errorMsg (typeCheck ctxt consCase)
+            let! resTy =
+                match consCaseTy with
+                | Fun(headTy,Fun(tailTy,resTy)) when headTy = elemTy && tailTy = elemTy ->
+                    Result resTy
+                | _ ->
+                    err ("tail case expected to have type " + elemTy.ToString() + " -> " + scrutTy.ToString() + " -> " + nilCaseTy.ToString() + " but instead computed " + consCaseTy.ToString())
+            return resTy
+        }
+    | SumCase(scrut, lCase, rCase) ->
+        check {
+            let! scrutTy = w errorMsg (typeCheck ctxt scrut)
+            let! tyL, tyR =
+                match scrutTy with
+                | Sum(tyL, tyR) ->
+                    Result (tyL, tyR)
+                | _ ->
+                    err ("scrutinee expected to have sum type but instead has type " + scrutTy.ToString())
+            let! lCaseTy = w errorMsg (typeCheck ctxt lCase)
+            let! rCaseTy = w errorMsg (typeCheck ctxt rCase)
+            let! resTyL =
+                match lCaseTy with
+                | Fun(domL,resTy) when domL = tyL ->
+                    Result resTy
+                | _ ->
+                    err ("left case expected to have type of the form " + tyL.ToString() + " -> ?, but instead computed " + lCaseTy.ToString())
+            let! resTyR =
+                match rCaseTy with
+                | Fun(domR,resTy) when domR = tyR ->
+                    Result resTy
+                | _ ->
+                    err ("right case expected to have type of the form " + tyR.ToString() + " -> ?, but instead computed " + lCaseTy.ToString())
+            do!
+                match resTyR = resTyL with
+                | true ->
+                    Result ()
+                | false ->
+                    err ("left case body type " + resTyL.ToString() + " does not match right case body type " + resTyR.ToString())
+            return resTyL
+        }
+    | LetRec(funName, parName, domTy, codTy, body) ->
+        check {
+            let funTy = Fun(domTy,codTy)
+            let ctxt' = { ctxt with venv = ctxt.venv.Add(funName,funTy).Add(parName,domTy) }
+            let! tyBody = w errorMsg (typeCheck ctxt' body)
+            return Fun(domTy, tyBody)
+        }

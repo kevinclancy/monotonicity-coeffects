@@ -1,6 +1,4 @@
-﻿// Learn more about F# at http://fsharp.org
-
-open System
+﻿open System
 open Lexer
 open Microsoft.FSharp.Text.Lexing
 open Microsoft.FSharp.Text.Parsing
@@ -28,9 +26,11 @@ let joinNat (t : P.Term) =
             | _ ->
                 failwith "This program has 'gone wrong'. Oops."
 
-        P.Abs("n", P.Prim("Nat"), P.App(PrimFun("joinNat'", joinNat'), P.Var("n")))
+        P.Abs("n", P.Prim("Nat"), P.App(PrimFun("joinNat'", P.Prim("Nat"), P.Prim("Nat"), joinNat'), P.Var("n")))
     | _ ->
         failwith "this program has 'gone wrong'. oops."    
+
+let primJoinNat = P.PrimFun("joinNat", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.Prim("Nat")), joinNat)
 
 let lessNat (t : P.Term) =
     match t with
@@ -45,18 +45,22 @@ let lessNat (t : P.Term) =
             | _ ->
                 failwith "This program has 'gone wrong'. Oops."
 
-        P.Abs("n", P.Prim("Nat"), P.App(PrimFun("lessNat'", joinNat'), P.Var("n")))
+        P.Abs("n", P.Prim("Nat"), P.App(PrimFun("lessNat'", P.Prim("Nat"), P.Prim("Nat"), joinNat'), P.Var("n")))
     | _ ->
         failwith "this program has 'gone wrong'. oops."    
+
+let primLessNat = P.PrimFun("lessNat", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.pBoolTy), lessNat)
 
 let joinBool (t : P.Term)  =
     match t with
     | PCFBool(a) ->
-        let lessNat' (s : P.Term) =
+        let joinBool' (s : P.Term) =
             match s with
             | PCFBool(b) ->
                 makePcfBool (a || b)
-        P.Abs("b", P.Prim("Bool"), P.App(P.PrimFun("joinBool'", lessNat'), P.Var("b")))
+        P.Abs("b", P.pBoolTy, P.App(P.PrimFun("joinBool'", P.pBoolTy, P.pBoolTy, joinBool'), P.Var("b")))
+
+let primJoinBool = P.PrimFun("joinBool", P.pBoolTy, P.Fun(P.pBoolTy, P.pBoolTy), joinBool)
 
 let lessBool (t : P.Term)  =
     match t with
@@ -65,7 +69,9 @@ let lessBool (t : P.Term)  =
             match s with
             | PCFBool(b) ->
                 makePcfBool (a = false && b = true)
-        P.Abs("b", P.Prim("Bool"), P.App(P.PrimFun("lessBool'", lessBool'), P.Var("b")))
+        P.Abs("b", P.pBoolTy, P.App(P.PrimFun("lessBool'", P.pBoolTy, P.pBoolTy, lessBool'), P.Var("b")))
+
+let primLessBool = P.PrimFun("lessBool", P.pBoolTy, P.Fun(P.pBoolTy, P.pBoolTy), lessBool)
 
 let joinUnit (t : P.Term)  =
     match t with
@@ -76,9 +82,11 @@ let joinUnit (t : P.Term)  =
                 P.PrimUnitVal
             | _ ->
                 failwith "This program has 'gone wrong'. Oops."
-        P.Abs("b", P.Prim("Unit"), P.App(P.PrimFun("jUnit'", joinUnit'), P.Var("b")))
+        P.Abs("b", P.pUnitTy, P.App(P.PrimFun("jUnit'", P.pUnitTy, P.pUnitTy, joinUnit'), P.Var("b")))
     | _ ->
         failwith "this program has 'gone wrong'. oops."
+
+let primJoinUnit = P.PrimFun("joinUnit", P.pUnitTy, P.Fun(P.pUnitTy, P.pUnitTy), joinBool)
 
 let lessUnit (t : P.Term)  =
     match t with
@@ -89,28 +97,30 @@ let lessUnit (t : P.Term)  =
                 pcfFalse
             | _ ->
                 failwith "This program has 'gone wrong'. Oops."
-        P.Abs("b", P.Prim("Unit"), P.App(P.PrimFun("<'", lessUnit'), P.Var("b")))
+        P.Abs("b", P.pUnitTy, P.App(P.PrimFun("<'", P.pUnitTy, P.pBoolTy, lessUnit'), P.Var("b")))
     | _ ->
         failwith "this program has 'gone wrong'. oops."
+
+let primLessUnit = P.PrimFun("lessUnit", P.pUnitTy, P.Fun(P.pUnitTy, P.pBoolTy), lessUnit)
 
 let baseTyMap =
     Map<string, Kind>(
         [("Nat", KProper(
                     P.Prim("Nat"), 
-                    Some(PrimFun("lessNat", lessNat)), 
-                    Some { bot = PrimNatVal(0) ; join = PrimFun("joinNat", joinNat) }, 
+                    Some(primLessNat), 
+                    Some { bot = PrimNatVal(0) ; join = primJoinNat }, 
                     noRange));
 
          ("Unit", KProper(
                     P.Unit,
-                    Some(PrimFun("lessUnit", lessUnit)),
-                    Some{bot = PrimUnitVal ; join = PrimFun("joinUnit", joinUnit)},
+                    Some(primLessUnit),
+                    Some{bot = PrimUnitVal ; join = primJoinUnit },
                     noRange));
 
          ("Bool", KProper(
                     P.Sum(P.Unit, P.Unit),
-                    Some(PrimFun("lessBool", lessBool)),
-                    Some{bot = P.In1(P.PrimUnitVal) ; join = PrimFun("joinBool", joinBool)},
+                    Some(primLessBool),
+                    Some{bot = makePcfBool false ; join = primJoinBool},
                     noRange))])
  
 let plus (t1 : P.Term) : P.Term =
@@ -122,9 +132,11 @@ let plus (t1 : P.Term) : P.Term =
                 P.PrimNatVal(n + m)
             | _ ->
                 failwith goneWrong
-        P.PrimFun("plus'", plus')
+        P.PrimFun("plus'", P.Prim("Nat"), P.Prim("Nat"), plus')
     | _ ->
         failwith goneWrong
+
+let primPlus = P.PrimFun("plus", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.Prim("Nat")), plus)
 
 let mult (t1 : P.Term) : P.Term =
     match t1 with
@@ -135,9 +147,11 @@ let mult (t1 : P.Term) : P.Term =
                 P.PrimNatVal(n * m)
             | _ ->
                 failwith goneWrong
-        P.PrimFun("mult'", mult')
+        P.PrimFun("mult'", P.Prim("Nat"), P.Prim("Nat"), mult')
     | _ ->
         failwith goneWrong
+
+let primMult = P.PrimFun("mult", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.Prim("Nat")), mult)
 
 let minus (t1 : P.Term) : P.Term =
     match t1 with
@@ -148,42 +162,40 @@ let minus (t1 : P.Term) : P.Term =
                 P.PrimNatVal(n - m)
             | _ ->
                 failwith goneWrong
-        P.PrimFun("minus'", minus')
+        P.PrimFun("minus'", P.Prim("Nat"), P.Prim("Nat"), minus')
     | _ ->
         failwith goneWrong
+
+let primMinus = P.PrimFun("minus", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.Prim("Nat")), minus)
 
 let bAnd (t1 : P.Term) : P.Term =
     match t1 with
-    | P.PrimBoolVal(a) ->
+    | PCFBool(a) ->
         let and' (t2 : P.Term) =
             match t2 with
-            | P.PrimBoolVal(b) ->
-                P.PrimBoolVal(a && b)
-            | _ ->
-                failwith goneWrong
-        P.PrimFun("and'", and')
-    | _ ->
-        failwith goneWrong
-  
+            | PCFBool(b) ->
+                makePcfBool (a && b)
+        P.PrimFun("and'", P.pBoolTy, P.pBoolTy, and')
+
+let primAnd = P.PrimFun("bAnd", P.pBoolTy, P.Fun(P.pBoolTy, P.pBoolTy), bAnd)
+
 let bOr (t1 : P.Term) : P.Term =
     match t1 with
-    | P.PrimBoolVal(a) ->
+    | PCFBool(a) ->
         let or' (t2 : P.Term) =
             match t2 with
-            | P.PrimBoolVal(b) ->
-                P.PrimBoolVal(a || b)
-            | _ ->
-                failwith goneWrong
-        P.PrimFun("or'", or')
-    | _ ->
-        failwith goneWrong
+            | PCFBool(b) ->
+                makePcfBool (a || b)
+        P.PrimFun("or'", P.pBoolTy, P.pBoolTy, or')
+
+let primOr = P.PrimFun("bOr", P.pBoolTy, P.Fun(P.pBoolTy, P.pBoolTy), bOr)
 
 let bNot (t1 : P.Term) : P.Term =
     match t1 with
-    | P.PrimBoolVal(a) ->
-        P.PrimBoolVal(not a)
-    | _ ->
-        failwith goneWrong
+    | PCFBool(a) ->
+        makePcfBool (not a)
+
+let primNot = P.PrimFun("bNot", P.pBoolTy, P.pBoolTy, bNot)
 
 let leq (t1 : P.Term) : P.Term =
     match t1 with
@@ -191,12 +203,14 @@ let leq (t1 : P.Term) : P.Term =
         let leq' (t2 : P.Term) =
             match t2 with
             | P.PrimNatVal(m) ->
-                P.PrimBoolVal(n <= m)
+                makePcfBool (n <= m)
             | _ ->
                 failwith goneWrong
-        P.PrimFun("leq'", leq')
+        P.PrimFun("leq'", P.Prim("Nat"), P.pBoolTy, leq')
     | _ ->
         failwith goneWrong
+
+let primLeq = P.PrimFun("leq", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.pBoolTy), leq)
 
 let geq (t1 : P.Term) : P.Term =
     match t1 with
@@ -204,31 +218,33 @@ let geq (t1 : P.Term) : P.Term =
         let geq' (t2 : P.Term) =
             match t2 with
             | P.PrimNatVal(m) ->
-                P.PrimBoolVal(n >= m)
+                makePcfBool (n >= m)
             | _ ->
                 failwith goneWrong
-        P.PrimFun("geq'", geq')
+        P.PrimFun("geq'", P.Prim("Nat"), P.pBoolTy, geq')
     | _ ->
         failwith goneWrong
+
+let primGeq = P.PrimFun("geq", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.pBoolTy), geq)
 
 let baseVEnv =
     Map<string, Ast.Ty * P.Term>(
         [("plus", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Nat", noRange), noRange), noRange), 
-                   P.PrimFun("plus", plus)))
+                   primPlus))
          ("mult", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Nat", noRange), noRange), noRange), 
-                   P.PrimFun("mult", mult)))
+                   primMult))
          ("minus",(FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectAntitone, TyId("Nat", noRange), noRange), noRange),
-                   P.PrimFun("minus",minus)))
+                   primMinus))
          ("bAnd", (FunTy(TyId("Bool",noRange), CoeffectMonotone, FunTy(TyId("Bool",noRange), CoeffectMonotone, TyId("Bool", noRange), noRange), noRange),
-                   P.PrimFun("bAnd",bAnd)))
+                   primAnd))
          ("bOr", (FunTy(TyId("Bool",noRange), CoeffectMonotone, FunTy(TyId("Bool",noRange), CoeffectMonotone, TyId("Bool", noRange), noRange), noRange),
-                  P.PrimFun("bOr",bOr)))
+                  primOr))
          ("bNot", (FunTy(TyId("Bool",noRange), CoeffectAntitone, TyId("Bool",noRange), noRange),
-                   P.PrimFun("bNot", bNot)))
+                   primNot))
          ("leq", (FunTy(TyId("Nat",noRange), CoeffectAntitone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Bool", noRange), noRange), noRange),
-                  P.PrimFun("leq", leq)))
+                  primLeq))
          ("geq", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectAntitone, TyId("Bool", noRange), noRange), noRange),
-                  P.PrimFun("geq", geq)))
+                  primGeq))
          //("eq", (FunTy(TyId("Nat",noRange), CoeffectAny, FunTy(TyId("Nat",noRange), CoeffectAny, TyId("Bool", noRange), noRange), noRange))
         // TODO: we need primitive unit values in syntax
          ("unit", (TyId("Unit", noRange),
@@ -270,7 +286,7 @@ let main argv =
                 q.ToString() + " " + id
             let stringEntriesR = (Map.toList (Map.map mapCoeffectEntry R))
             let stringR = String.concat ", " (List.map (fun (_,v) -> v) stringEntriesR)
-            let result = normalize pTerm
+            //let result = normalize pTerm
             printf "Successfully checked program.\nType: %s\nCoeffect: %s" (ty.ToString()) stringR
         0 // return an integer exit code
     with 

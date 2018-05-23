@@ -46,7 +46,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
         else
             Error ["Negative integer constants not allowed", rng]
     | Bool(b,rng) ->
-        Result (TyId("Bool", noRange), Map.map (fun k v -> Coeffect.Ign) venv, P.PrimBoolVal(b))
+        Result (TyId("Bool", noRange), Map.map (fun k v -> Coeffect.Ign) venv, makePcfBool b)
     | Forall(tyVarId, pk, body, rng) ->
         check {
             let tyVarEnv' = Map.add tyVarId pk tyVarEnv
@@ -225,8 +225,12 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                     (errorMsg + ": value " + e2.ToString() + " is not a subtype of dictionary codomain " + dValTy.ToString())
                     rng
                     (Ty.IsSubtype ctxt.tenv.tyAliasEnv valTy dValTy)
+            let! _, _, pDictJoin = kCheckSemilattice ctxt.tenv dictTy
             let resQ = contr (contr (comp CoeffectAny keyQ) valQ) dictQ
-            let pResTerm = P.Cons(P.Pair(pKeyTerm, pValTerm), pDictTerm)
+            let! pKeyTy = withError errorMsg rng (kCheckProset ctxt.tenv keyTy)
+            let! pValTy = withError errorMsg rng (kCheckProset ctxt.tenv valTy)
+            let sng = P.Cons(P.Pair(pKeyTerm,pValTerm), P.EmptyList(P.Prod(pKeyTy, pValTy)))
+            let pResTerm = P.App(P.App(pDictJoin, sng), pDictTerm)
             return dictTy, resQ, pResTerm
         }
     | Fst(ePair,rng) ->
@@ -281,14 +285,18 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
     | Inl(lty, rty, expr, rng) ->
         check {
             let! exprTy, exprQ, pExprTerm = withError errorMsg rng (typeCheck ctxt expr)
+            let! pTyL = withError errorMsg rng (kCheckProset ctxt.tenv lty)
+            let! pTyR = withError errorMsg rng (kCheckProset ctxt.tenv rty)
             do! withError errorMsg rng (Ty.IsSubtype ctxt.tenv.tyAliasEnv exprTy lty)
-            return Sum(lty,rty,noRange), exprQ, P.In1(pExprTerm)
+            return Sum(lty,rty,noRange), exprQ, P.In1(pTyL, pTyR, pExprTerm)
         }
     | Inr(lty, rty, expr, rng) ->
         check {
             let! exprTy, exprQ, pExprTerm = withError errorMsg rng (typeCheck ctxt expr)
+            let! pTyL = withError errorMsg rng (kCheckProset ctxt.tenv lty)
+            let! pTyR = withError errorMsg rng (kCheckProset ctxt.tenv rty)
             do! withError errorMsg rng (Ty.IsSubtype ctxt.tenv.tyAliasEnv exprTy rty)
-            return Sum(lty,rty,noRange), exprQ, P.In2(pExprTerm)
+            return Sum(lty,rty,noRange), exprQ, P.In2(pTyL, pTyR, pExprTerm)
         }
     | Cap(q, e, rng) ->
         check {
@@ -325,7 +333,8 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let tosetErrorMsg =
                 (errorMsg + ": computed type " + contentsTy.ToString() + " for " + expr.ToString())
             let! _, _ = withError tosetErrorMsg rng (kCheckToset ctxt.tenv contentsTy)
-            return IVar(contentsTy, noRange), comp CoeffectAny contentsQ, P.Cons(pContentsTerm, P.EmptyList)
+            let! pContentsTy = withError errorMsg rng (kCheckProset ctxt.tenv contentsTy)
+            return IVar(contentsTy, noRange), comp CoeffectAny contentsQ, P.Cons(pContentsTerm, P.EmptyList(pContentsTy))
         }
     | IGet(varId, ivar, body, rng) ->
         check {
@@ -348,8 +357,8 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                     P.Abs("!hi", pTyContents, P.Abs("!ti", pIvarTy, 
                         P.ListCase(
                             P.Var("!ti"),
-                            P.In1(P.App(P.Abs(varId, pTyContents, pBodyTerm), P.Var("!hi"))),
-                            P.Abs("_", pTyContents, P.Abs("_", pIvarTy, P.In2(P.PrimUnitVal)))))))
+                            P.In1(pTyContents, P.Unit, P.App(P.Abs(varId, pTyContents, pBodyTerm), P.Var("!hi"))),
+                            P.Abs("_", pTyContents, P.Abs("_", pIvarTy, P.In2(pTyContents, P.Unit, P.PrimUnitVal)))))))
             return Partial(bodyTy, noRange), contr ivarQ (bodyQ.Remove(varId)), resTerm
         }
     | Let(varId, bindExpr, bodyExpr, rng) ->
@@ -383,14 +392,15 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let pBodyFun = P.Abs(varId, pBindTy, pBodyTerm)
             let resTerm = P.SumCase(
                             pPartialCompTerm, 
-                            P.Abs("!l", pBindTy, P.In1(P.App(pBodyFun, P.Var("!r")))),
-                            P.Abs("!r", P.Unit, P.In2(P.PrimUnitVal)))
+                            P.Abs("!l", pBindTy, P.In1(pBindTy, P.Unit, P.App(pBodyFun, P.Var("!r")))),
+                            P.Abs("!r", P.Unit, P.In2(pBindTy, P.Unit, P.PrimUnitVal)))
             return Partial(bodyTy, noRange), contr partialCompQ (bodyQ.Remove(varId)), resTerm
         }
     | MRet(expr,rng) ->
         check {
             let! exprTy, exprQ, pExprTerm = withError errorMsg rng (typeCheck ctxt expr)
-            return Partial(exprTy, noRange), exprQ, P.In1(pExprTerm)
+            let! pExprTy = withError errorMsg rng (kCheckProset ctxt.tenv exprTy)
+            return Partial(exprTy, noRange), exprQ, P.In1(pExprTy, P.Unit, pExprTerm)
         } 
     | CoeffectAscription(assertions, expr, rng) ->
         let checkAssertion (exprQ : CoeffectMap) (q : Coeffect, x : string) =
@@ -433,5 +443,6 @@ let progCheck (ctxt : Context) (p : Prog) : Check<Ty * CoeffectMap * P.Term> =
         let tenvCheck = Result ctxt.tenv
         let! tenv = List.fold foldAlias tenvCheck p.typeAliases
         let! ty,R,pTerm = typeCheck { ctxt with tenv = tenv } p.body
+        let! _ = P.typeCheck { venv = Map.empty ; tenv = Set.empty } pTerm
         return ty,R,pTerm
     }
