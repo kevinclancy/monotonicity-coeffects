@@ -20,9 +20,9 @@ type Ty =
         | List(elemTy) ->
             "List[" + elemTy.ToString() + "]"
         | Prod(lTy, rTy) ->
-            lTy.ToString() + "*" + rTy.ToString()
+            "(" + lTy.ToString() + "*" + rTy.ToString() + ")"
         | Sum(lTy, rTy) ->
-            lTy.ToString() + "+" + rTy.ToString()
+            "(" + lTy.ToString() + "+" + rTy.ToString() + ")"
         | Fun(dom,cod) ->
             dom.ToString() + " -> " + cod.ToString()
         | Prim(name) ->
@@ -389,26 +389,26 @@ let rec typeCheck (ctxt : Context) (t : Term) : Check<Ty> =
                     err (": expected pair type, but computed " + ty.ToString())
             return tyR
         }
-    | In1(ty1,ty2,t) ->
+    | In1(ty1,ty2,s) ->
         check {
-            let! ty = w errorMsg (typeCheck ctxt t)
+            let! ty = w errorMsg (typeCheck ctxt s)
             do!
                 match ty = ty1 with
                 | true -> 
                     Result ()
                 | false ->
-                    err (": ascripted type " + ty1.ToString() + "does not match computed type " + ty.ToString())
+                    err (": ascripted type " + ty1.ToString() + " does not match computed type " + ty.ToString())
             return Sum(ty1,ty2)
         }
-    | In2(ty1, ty2, t) ->
+    | In2(ty1, ty2, s) ->
         check {
-            let! ty = w errorMsg (typeCheck ctxt t)
+            let! ty = w errorMsg (typeCheck ctxt s)
             do!
                 match ty = ty2 with
                 | true -> 
                     Result ()
                 | false ->
-                    err ("ascripted type " + ty2.ToString() + "does not match computed type " + ty.ToString())
+                    err ("ascripted type " + ty2.ToString() + " does not match computed type " + ty.ToString())
             return Sum(ty1,ty2)
         }     
     | App(fn, arg) ->
@@ -519,7 +519,7 @@ let rec typeCheck (ctxt : Context) (t : Term) : Check<Ty> =
                 | Fun(domR,resTy) when domR = tyR ->
                     Result resTy
                 | _ ->
-                    err ("right case expected to have type of the form " + tyR.ToString() + " -> ?, but instead computed " + lCaseTy.ToString())
+                    err ("right case expected to have type of the form " + tyR.ToString() + " -> ?, but instead computed " + rCaseTy.ToString())
             do!
                 match resTyR = resTyL with
                 | true ->
@@ -533,5 +533,11 @@ let rec typeCheck (ctxt : Context) (t : Term) : Check<Ty> =
             let funTy = Fun(domTy,codTy)
             let ctxt' = { ctxt with venv = ctxt.venv.Add(funName,funTy).Add(parName,domTy) }
             let! tyBody = w errorMsg (typeCheck ctxt' body)
+            do! 
+                match tyBody = codTy with
+                | true ->
+                    Result ()
+                | false ->
+                    err ("Computed letrec body type " + tyBody.ToString() + " does not matched ascribed type " + codTy.ToString())
             return Fun(domTy, tyBody)
         }

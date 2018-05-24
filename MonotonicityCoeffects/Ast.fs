@@ -247,11 +247,11 @@ type Ty =
     | Sum(tyL, tyR, rng) ->
         match Ty.reduce aliasEnv tyL with
         | Some(tyL') ->
-            Some(Prod(tyL',tyR,rng))
+            Some(Sum(tyL',tyR,rng))
         | None ->
             match Ty.reduce aliasEnv tyR with
             | Some(tyR') ->
-                Some(Prod(tyL,tyR',rng))
+                Some(Sum(tyL,tyR',rng))
             | None ->
                 None
     | IVar(tyContents, rng) ->

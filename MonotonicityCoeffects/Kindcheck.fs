@@ -105,8 +105,8 @@ let makeSumToset (pTyL : P.Ty) (compL : P.Term) (pTyR : P.Ty) (compR : P.Term) =
     resTy,
     P.Abs("!x", resTy, P.Abs("!y", resTy, 
         P.SumCase(P.Var("!x"), 
-                P.Abs("!x'", pTyL, P.SumCase(P.Var("!y"), P.Abs("!y'", pTyL, P.App(P.App(compL,P.Var("!x'")), P.Var("!y'"))), pcfFalse)),
-                P.Abs("!x'", pTyR, P.SumCase(P.Var("!y"), P.Abs("!y'", pTyR, P.App(P.App(compR,P.Var("!x'")), P.Var("!y'"))), pcfFalse)))))          
+                P.Abs("!x'", pTyL, P.SumCase(P.Var("!y"), P.Abs("!y'", pTyL, P.App(P.App(compL,P.Var("!x'")), P.Var("!y'"))), P.Abs("!_", pTyL, pcfFalse))),
+                P.Abs("!x'", pTyR, P.SumCase(P.Var("!y"), P.Abs("!y'", pTyR, P.App(P.App(compR,P.Var("!x'")), P.Var("!y'"))), P.Abs("!_", pTyR, pcfFalse))))))          
 
 /// kCheckToset tenv ty = res
 /// tenv - the type environment to check under
@@ -340,7 +340,7 @@ and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty> =
     | IVar(tyContents, rng) ->
         check {
             let! pTyContents,_ = withError (errorMsg + ": content type is not a toset") rng (kCheckToset tenv tyContents)
-            return pTyContents
+            return P.List(pTyContents)
         }
     | TyOp(varId, kind, body, rng) ->
         Error [(errorMsg + ": type operators do not denote posets",rng)]
@@ -479,7 +479,7 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
             let! kR = withError (errorMsg + ": right type is not well-kinded") rng (kSynth tenv tyR)
             let! pTyL, optTosetL, optSemilatL = getProper "left type" kL
             let! pTyR, optTosetR, optSemilatR = getProper "right type" kR
-            let pTy = P.Prod(pTyL, pTyR)
+            let pTy = P.Sum(pTyL, pTyR)
             let semToset = 
                 match optTosetL, optTosetR with
                 | Some(compL), Some(compR) ->

@@ -349,6 +349,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let venv' = venv.Add(varId, tyContents)
             let! bodyTy, bodyQ, pBodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } body)
             let! pBodyTy, pBodyBot, pBodyJoin = kCheckSemilattice ctxt.tenv bodyTy
+            let pResTy = P.List pBodyTy
             let pIvarTy = P.List pTyContents
             let resTerm = 
                 P.ListCase(
@@ -357,8 +358,8 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                     P.Abs("!hi", pTyContents, P.Abs("!ti", pIvarTy, 
                         P.ListCase(
                             P.Var("!ti"),
-                            P.In1(pTyContents, P.Unit, P.App(P.Abs(varId, pTyContents, pBodyTerm), P.Var("!hi"))),
-                            P.Abs("_", pTyContents, P.Abs("_", pIvarTy, P.In2(pTyContents, P.Unit, P.PrimUnitVal)))))))
+                            P.In1(pBodyTy, P.Unit, P.App(P.Abs(varId, pTyContents, pBodyTerm), P.Var("!hi"))),
+                            P.Abs("_", pTyContents, P.Abs("_", pIvarTy, P.In2(pBodyTy, P.Unit, P.PrimUnitVal)))))))
             return Partial(bodyTy, noRange), contr ivarQ (bodyQ.Remove(varId)), resTerm
         }
     | Let(varId, bindExpr, bodyExpr, rng) ->
