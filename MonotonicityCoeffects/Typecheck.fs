@@ -49,10 +49,16 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
         Result (TyId("Bool", noRange), Map.map (fun k v -> Coeffect.Ign) venv, makePcfBool b)
     | Forall(tyVarId, pk, body, rng) ->
         check {
-            let tyVarEnv' = Map.add tyVarId pk tyVarEnv
+            let tyVarEnv' = 
+                match pk with 
+                | Semilattice ->
+                    let env' = Map.add tyVarId pk tyVarEnv
+                    Map.add (tyVarId + "Delta") Poset env'
+                | _ ->
+                    Map.add tyVarId pk tyVarEnv
             let tenv' = { tenv with tyVarEnv = tyVarEnv' }
             let! ty, qs, term = withError (errorMsg + ": body is not well-typed") rng (typeCheck { ctxt with tenv = tenv' } body)
-            let term' = 
+            let term2 = 
                 let pTyVar = P.TyVar("$" + tyVarId)
                 match pk with
                 | Poset ->
@@ -62,10 +68,10 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 | Semilattice ->
                      P.Forall("$" + tyVarId,
                         P.Abs("$" + tyVarId + "_bot", pTyVar, 
-                            P.Abs("$" + tyVarId + "_join", P.Fun(pTyVar, P.Fun(pTyVar, pTyVar)), term)))
-            
-            // TODO: this should be a forall type rather than a tyOp
-            return (ForallTy(tyVarId, pk, ty, noRange), qs, term')
+                            P.Abs("$" + tyVarId + "_join", P.Fun(pTyVar, P.Fun(pTyVar, pTyVar)), 
+                                P.Forall("$" + tyVarId + "Delta", 
+                                    P.Abs("$" + tyVarId + "_iso", P.Fun(P.TyVar("$" + tyVarId), P.List(P.TyVar("$" + tyVarId + "Delta"))), term)))))
+            return (ForallTy(tyVarId, pk, ty, noRange), qs, term2)
         }
     | ForallApp(forallExpr, tyArg, rng) ->
         check {
@@ -88,11 +94,14 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 let term'' = P.App(term', pComp)
                 return (ty', qsForall, term'')
             | Semilattice ->
-                let! pTy, pBot, pJoin = withError errorMsg rng (kCheckSemilattice ctxt.tenv tyArg)
-                let term' = P.TyApp(termForall, pTy)
-                let term'' = P.App(term', pBot)
-                let term''' = P.App(term'', pJoin)
-                return (ty', qsForall, term''')
+                let! pTy, pBot, pJoin, deltaTy, pIso = withError errorMsg rng (kCheckSemilattice ctxt.tenv tyArg)
+                let term1 = P.TyApp(termForall, pTy)
+                let term2 = P.App(term1, pBot)
+                let term3 = P.App(term2, pJoin)
+                let! pDeltaTy = kCheckProset ctxt.tenv deltaTy
+                let term4 = P.TyApp(term3, pDeltaTy)
+                let term5 = P.App(term4, pIso)  
+                return (ty', qsForall, term5)
         }
     | Abs(var, varTy, body, rng) ->
         check {
@@ -137,13 +146,13 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 Error [errorMsg + ": identifier " + name.ToString() + " undeclared",rng]
     | Bot(ty,rng) ->
         check {
-            let! _, pBot, _ = withError errorMsg rng (kCheckSemilattice tenv ty)
+            let! _, pBot, _,_,_ = withError errorMsg rng (kCheckSemilattice tenv ty)
             let qsAllIgn = Map.map (fun k v -> Coeffect.Ign) venv
             return ty, qsAllIgn, pBot
         }
     | Join(ty, e1, e2, rng) ->
         check {
-            let! _, _, pJoin = withError errorMsg rng (kCheckSemilattice tenv ty)
+            let! _, _, pJoin,_,_ = withError errorMsg rng (kCheckSemilattice tenv ty)
             let! ty1, qs1, pTerm1 = withError errorMsg rng (typeCheck ctxt e1)
             let! ty2, qs2, pTerm2 = withError errorMsg rng (typeCheck ctxt e2)
             do! withError errorMsg rng (Ty.IsEquiv ctxt.tenv.tyAliasEnv ty1 ty)
@@ -162,7 +171,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
         }
     | Extract(targetTy, key, value, acc, dict, body, rng) ->
         check {
-            let! pTargetTy, pTargetBot, pTargetJoin = 
+            let! pTargetTy, pTargetBot, pTargetJoin, _, _ = 
                 withError errorMsg rng (kCheckSemilattice tenv targetTy)
             let! dictTy, dictQ, pDictTerm = 
                 withError errorMsg rng (typeCheck ctxt dict)
@@ -225,7 +234,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                     (errorMsg + ": value " + e2.ToString() + " is not a subtype of dictionary codomain " + dValTy.ToString())
                     rng
                     (Ty.IsSubtype ctxt.tenv.tyAliasEnv valTy dValTy)
-            let! _, _, pDictJoin = kCheckSemilattice ctxt.tenv dictTy
+            let! _, _, pDictJoin,_,_ = kCheckSemilattice ctxt.tenv dictTy
             let resQ = contr (contr (comp CoeffectAny keyQ) valQ) dictQ
             let! pKeyTy = withError errorMsg rng (kCheckProset ctxt.tenv keyTy)
             let! pValTy = withError errorMsg rng (kCheckProset ctxt.tenv valTy)
@@ -348,8 +357,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let! pTyContents = kCheckProset ctxt.tenv tyContents
             let venv' = venv.Add(varId, tyContents)
             let! bodyTy, bodyQ, pBodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } body)
-            let! pBodyTy, pBodyBot, pBodyJoin = kCheckSemilattice ctxt.tenv bodyTy
-            let pResTy = P.List pBodyTy
+            let! pBodyTy, pBodyBot, _,_,_ = kCheckSemilattice ctxt.tenv bodyTy
             let pIvarTy = P.List pTyContents
             let resTerm = 
                 P.ListCase(

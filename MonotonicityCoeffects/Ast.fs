@@ -90,35 +90,6 @@ type ProperKind =
         | Poset -> "POSET"
         | Semilattice -> "SEMILATTICE"                
 
-/// Semantic interpretation of toset as a PCF comparison operator
-type SemToset = PCF.Term
-/// Posets semantically interpreted as PCF type paired with predicate (the latter irrelevant for our purposes)
-type SemPoset = PCF.Ty
-/// Semilattices semantically interpreted as tuple of PCF terms (bottom element , join operator)
-type SemSemilat = { bot : PCF.Term ; join : PCF.Term }
-
-type Kind =
-  /// poset - underlying PCF proper type (i.e. the set underlying the poset -- the order is an RHOL predicate beyond the 
-  ///         scope of this prototype)
-  /// toset - Some(semToset) if classified type provides a toset interpretation, None otherwise
-  /// semilat - Some(semSemilat) if classified type provides a semilattice interpretation, None otherwise
-  | KProper of poset : SemPoset * toset : Option<SemToset> * semilat : Option<SemSemilat> * Range
-  | KOperator of dom : ProperKind * cod : Kind * Range
-
-/// If k is KProper, return true iff it holds a component representing the proper kind p
-let hasKind (k : Kind) (p : ProperKind) =
-    match k with
-    | KProper(_,toset,semilat,_) ->
-        match p with
-        | Poset ->
-            true
-        | Toset ->
-            toset.IsSome
-        | Semilattice ->
-            semilat.IsSome
-    | KOperator(_,_,_) ->
-        false
-
 type SubtypeResult =
     | Success
     | Failure of List<string>
@@ -381,6 +352,35 @@ type Ty =
             "[" + ty.ToString() + "]"
         | TyApp(forallTy, argTy, rng) ->
             "(" + forallTy.ToString() + " " + argTy.ToString() + ")" 
+
+/// Semantic interpretation of toset as a PCF comparison operator
+type SemToset = PCF.Term
+/// Posets semantically interpreted as PCF type paired with predicate (the latter irrelevant for our purposes)
+type SemPoset = PCF.Ty
+/// Semilattices semantically interpreted as tuple of PCF terms (bottom element , join operator)
+type SemSemilat = { bot : PCF.Term ; join : PCF.Term ; tyDelta : Ty ; iso : PCF.Term }
+
+type Kind =
+  /// poset - underlying PCF proper type (i.e. the set underlying the poset -- the order is an RHOL predicate beyond the 
+  ///         scope of this prototype)
+  /// toset - Some(semToset) if classified type provides a toset interpretation, None otherwise
+  /// semilat - Some(semSemilat) if classified type provides a semilattice interpretation, None otherwise
+  | KProper of poset : SemPoset * toset : Option<SemToset> * semilat : Option<SemSemilat> * Range
+  | KOperator of dom : ProperKind * cod : Kind * Range
+
+/// If k is KProper, return true iff it holds a component representing the proper kind p
+let hasKind (k : Kind) (p : ProperKind) =
+    match k with
+    | KProper(_,toset,semilat,_) ->
+        match p with
+        | Poset ->
+            true
+        | Toset ->
+            toset.IsSome
+        | Semilattice ->
+            semilat.IsSome
+    | KOperator(_,_,_) ->
+        false
 
 type Expr =
   | Int of int * Range

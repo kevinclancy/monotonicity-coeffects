@@ -51,6 +51,17 @@ let lessNat (t : P.Term) =
 
 let primLessNat = P.PrimFun("lessNat", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.pBoolTy), lessNat)
 
+let isoNat (t : P.Term) : P.Term =
+    match t with
+    | P.PrimNatVal(m) when m = 0 ->
+        P.EmptyList(P.TyVar("Nat"))
+    | P.PrimNatVal(m) ->
+        P.Cons(P.PrimNatVal(m), P.EmptyList(P.Prim("Nat")))
+    | _ ->
+        failwith "this program has 'gone wrong'. oops."
+
+let primIsoNat = P.PrimFun("isoNat", P.Prim("Nat"), P.List(P.Prim("Nat")), isoNat)
+
 let joinBool (t : P.Term)  =
     match t with
     | PCFBool(a) ->
@@ -72,6 +83,17 @@ let lessBool (t : P.Term)  =
         P.Abs("b", P.pBoolTy, P.App(P.PrimFun("lessBool'", P.pBoolTy, P.pBoolTy, lessBool'), P.Var("b")))
 
 let primLessBool = P.PrimFun("lessBool", P.pBoolTy, P.Fun(P.pBoolTy, P.pBoolTy), lessBool)
+
+let isoBool (t : P.Term) : P.Term =
+    match t with
+    | PCFBool(a) when a = true ->
+        P.Cons(P.PrimUnitVal, P.EmptyList(P.Unit))
+    | PCFBool(a) ->
+        P.EmptyList(P.Unit)
+    | _ ->
+        failwith goneWrong
+
+let primIsoBool = P.PrimFun("isoBool", pBoolTy, P.List(P.Unit), isoBool)
 
 let joinUnit (t : P.Term)  =
     match t with
@@ -108,19 +130,19 @@ let baseTyMap =
         [("Nat", KProper(
                     P.Prim("Nat"), 
                     Some(primLessNat), 
-                    Some { bot = PrimNatVal(0) ; join = primJoinNat }, 
+                    Some { bot = PrimNatVal(0) ; join = primJoinNat ; tyDelta = TyId("Nat",noRange) ; iso = primIsoNat }, 
                     noRange));
 
          ("Unit", KProper(
                     P.Unit,
                     Some(primLessUnit),
-                    Some{bot = PrimUnitVal ; join = primJoinUnit },
+                    None,
                     noRange));
 
          ("Bool", KProper(
                     P.Sum(P.Unit, P.Unit),
                     Some(primLessBool),
-                    Some{bot = makePcfBool false ; join = primJoinBool},
+                    Some{bot = makePcfBool false ; join = primJoinBool ; tyDelta = TyId("Unit", noRange) ; iso = primIsoBool},
                     noRange))])
  
 let plus (t1 : P.Term) : P.Term =

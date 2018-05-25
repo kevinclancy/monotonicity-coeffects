@@ -24,7 +24,7 @@ type Ty =
         | Sum(lTy, rTy) ->
             "(" + lTy.ToString() + "+" + rTy.ToString() + ")"
         | Fun(dom,cod) ->
-            dom.ToString() + " -> " + cod.ToString()
+            "(" + dom.ToString() + " -> " + cod.ToString() + ")"
         | Prim(name) ->
             name
         | TyVar(name) ->
