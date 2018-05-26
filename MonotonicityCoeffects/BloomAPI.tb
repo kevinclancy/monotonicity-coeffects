@@ -1,0 +1,46 @@
+﻿types
+  Bag = typefun (x : TOSET) x |> Nat end;
+in
+
+let equal =
+
+	fun (A : TOSET) (x : A) (y : A)
+		(bAnd 
+		  (bNot (x < y)) 
+		  (bNot (y < x)))
+	end
+
+and monoIf = 
+
+  fun (src : SEMILATTICE) (dest : SEMILATTICE) (cond : src) (res : dest)
+      let extract to dest with k v acc = { unit -> cond : Unit |> src } in
+		res
+      end
+  end
+
+and multiplicity =
+
+  fun (ElemTy : TOSET) (b : Bag ElemTy) (eLookup : ElemTy)
+    let extract to Nat with e m acc = b
+    and isEqual = (equal !ElemTy e eLookup) 
+    in (max (monoIf !Bool !Nat isEqual m) acc)
+    end
+  end
+
+and bagIntersect =
+
+    fun (ElemTy : TOSET) (x : Bag ElemTy) 
+        hom (y : (Bag ElemTy) . (?ElemTy) * Nat)
+          let cap ? elem = fst y
+          and m = snd y
+          in { elem -> (min (multiplicity !ElemTy x elem) m) : (Bag ElemTy) }
+          end
+	    end
+	end
+
+in 
+    (bagIntersect 
+        !Nat 
+        { 1 -> 1, 2 -> 3 : (Bag Nat) }
+        { 1 -> 2, 2 -> 1 : (Bag Nat) })
+end

@@ -27,6 +27,7 @@ rule token = parse
 | "true"         { TRUE }
 | "false"        { FALSE }
 | "fun"          { FUN }
+| "hom"          { HOM }
 | "with"         { WITH }
 | "forall"       { FORALL }
 | "Forall"       { BIGFORALL }

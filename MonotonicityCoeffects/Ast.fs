@@ -337,7 +337,7 @@ type Ty =
         | Dictionary(dom,cod,_) ->
             "(" + dom.ToString() + " |> " + cod.ToString() + ")"
         | Capsule(ty,q,_) ->
-            "(" + ty.ToString() + " " + q.ToString() + ")"
+            "(" + q.ToString() + " " + ty.ToString() + ")"
         | Prod(tyL, tyR, _) ->
             "(" + tyL.ToString() + " * " + tyR.ToString() + ")"
         | Sum(tyL, tyR, _) ->
@@ -387,6 +387,7 @@ type Expr =
   | Bool of bool * Range
   | Forall of tyVar : string * kind : ProperKind * body : Expr * Range
   | ForallApp of forall : Expr * arg : Ty * Range
+  | Hom of var : string * semilatTy : Ty * deltaTy : Ty * body : Expr * Range
   | Abs of var : string * ty : Ty * body : Expr * Range
   | App of fn : Expr * arg : Expr * Range
   | Const of name : string * Range
@@ -479,5 +480,6 @@ type Expr =
         "@(" + contents' + ")"
     | TypeAscription(ty, expr, _) ->
         "::" + ty.ToString() + " " + expr.ToString()
-
+    | Hom(varId, tySemilat, tyDelta, body, rng) ->
+        "(hom (" + varId + " : " + tySemilat.ToString() + " . " + tyDelta.ToString() + ") " + body.ToString() + ")"
   type Prog = { typeAliases : List<string * Ty> ; exprAliases : Map<string,Expr> ; body : Expr }

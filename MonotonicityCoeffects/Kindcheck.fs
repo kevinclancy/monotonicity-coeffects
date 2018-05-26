@@ -77,21 +77,7 @@ type Range = Position * Position
                     P.App(P.App(P.App(pairWithList, P.Proj1(P.Var("!h"))), 
                                 P.App(P.Var("!f"), P.Var("!t"))),
                           P.App(pCodIso, P.Proj2(P.Var("!h"))))))))
-    resTy, bot, join, (Ast.Prod(domTy, codDeltaTy, noRange)), resIso
-
-let forEach (pSrcTy : P.Ty) (pDestTy : P.Ty) (pFun : P.Term) (pList : P.Term) : P.Term =
-    let forEachFun = 
-        P.LetRec("!f", "!l", P.List(pSrcTy), P.List(pDestTy), 
-            P.ListCase(P.Var("!l"), P.EmptyList(pDestTy), P.Abs("!h", pSrcTy, P.Abs("!t", P.List(pSrcTy), 
-                P.Cons(P.App(pFun, P.Var("!h")), P.App(P.Var("!f"), P.Var("!t")))))))
-    P.App(forEachFun, pList)
-
-let append (pElemTy : P.Ty) (pList1 : P.Term) (pList2 : P.Term) =
-    let appendFun = P.Abs("!l1", P.List(pElemTy), P.LetRec("!f", "!l2", P.List(pElemTy), P.List(pElemTy),
-        P.ListCase(P.Var("!l1"),
-            P.Var("!l2"),
-            P.Abs("!h", pElemTy, P.Abs("!t", P.List(pElemTy), P.Cons(P.Var("!h"), P.App(P.Var("!f"), P.Var("!t"))))))))
-    P.App(P.App(appendFun, pList1), pList2)
+    resTy, bot, join, (Ast.Prod(Ast.Capsule(domTy, CoeffectAny, noRange), codDeltaTy, noRange)), resIso
 
 let makeProdSemilat (pTyL : P.Ty) (pTyR : P.Ty) (bL : P.Term) (bR : P.Term) 
                     (jL : P.Term) (jR : P.Term) (deltaTyL : Ast.Ty) (deltaTyR : Ast.Ty) (pDeltaL : P.Ty) (pDeltaR : P.Ty)

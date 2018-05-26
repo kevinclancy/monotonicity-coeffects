@@ -103,6 +103,36 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 let term5 = P.App(term4, pIso)  
                 return (ty', qsForall, term5)
         }
+    | Hom(var, semilatTy, ascribedDeltaTy, body, rng) ->
+        check {
+            let! pSemilatTy, _, _, computedDeltaTy, pIso = 
+                withError ("type annotation " + semilatTy.ToString() + " is not a well-formed semilattice type") 
+                          rng 
+                         (kCheckSemilattice ctxt.tenv semilatTy)
+            do! withError (errorMsg + "ascribed delta type " + ascribedDeltaTy.ToString() + " does not match the delta type " 
+                           + computedDeltaTy.ToString() + " of " + semilatTy.ToString())
+                          rng
+                          (Ty.IsEquiv ctxt.tenv.tyAliasEnv ascribedDeltaTy computedDeltaTy)
+            let! pComputedDeltaTy = kCheckProset ctxt.tenv computedDeltaTy
+            let venv' = Map.add var computedDeltaTy venv
+            let! targetTy,qs,term = withError (errorMsg + ": body not well-typed") rng (typeCheck { ctxt with venv = venv' } body)
+            let! pTargetTy, pTargetBot, pTargetJoin, _, _ = 
+                withError 
+                    ("homomorphism codomains must be semilattice types, but computed codomain " + targetTy.ToString() + 
+                     " is not") 
+                    rng
+                    (kCheckSemilattice ctxt.tenv targetTy)
+            match qs.TryFind(var) with // None case unreachable
+            | Some(q) ->
+                let ty' = FunTy(semilatTy, q, targetTy, noRange)
+                let qs' = qs.Remove(var)
+                let pMapDelta = P.Abs(var, pComputedDeltaTy, term)
+                let pDeltas = P.App(pIso, P.Var("!x"))
+                let pMappedDeltas = forEach pComputedDeltaTy pTargetTy pMapDelta pDeltas
+                let pResult = P.fold pTargetTy pTargetTy pTargetJoin pMappedDeltas pTargetBot
+                let pHom = P.Abs("!x", pSemilatTy, pResult)
+                return ty', qs', pHom
+        }
     | Abs(var, varTy, body, rng) ->
         check {
             let! kVar = withError ("type annotation " + varTy.ToString() + " is not well-kinded") rng (kSynth ctxt.tenv varTy)
@@ -234,12 +264,18 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                     (errorMsg + ": value " + e2.ToString() + " is not a subtype of dictionary codomain " + dValTy.ToString())
                     rng
                     (Ty.IsSubtype ctxt.tenv.tyAliasEnv valTy dValTy)
-            let! _, _, pDictJoin,_,_ = kCheckSemilattice ctxt.tenv dictTy
+            let! _, pDictBot, pDictJoin,_,_ = kCheckSemilattice ctxt.tenv dictTy
             let resQ = contr (contr (comp CoeffectAny keyQ) valQ) dictQ
             let! pKeyTy = withError errorMsg rng (kCheckProset ctxt.tenv keyTy)
-            let! pValTy = withError errorMsg rng (kCheckProset ctxt.tenv valTy)
+            let! pValTy, _, _, valDeltaTy, pValIso = withError errorMsg rng (kCheckSemilattice ctxt.tenv valTy)
+            let! pValDeltaTy = kCheckProset ctxt.tenv valDeltaTy
+            //maybe we need a more sophisticated method for accomplishing this?
             let sng = P.Cons(P.Pair(pKeyTerm,pValTerm), P.EmptyList(P.Prod(pKeyTy, pValTy)))
-            let pResTerm = P.App(P.App(pDictJoin, sng), pDictTerm)
+            let pResTerm = 
+               P.ListCase(
+                 P.App(pValIso, pValTerm),
+                 pDictTerm,
+                 P.Abs("!h", pValDeltaTy, P.Abs("!t", P.List(pValDeltaTy), P.App(P.App(pDictJoin, sng), pDictTerm))))
             return dictTy, resQ, pResTerm
         }
     | Fst(ePair,rng) ->

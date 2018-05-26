@@ -32,7 +32,6 @@ type Ty =
         | ForallTy(id, body) ->
             "(Forall " + id + "." + body.ToString() + ")"
 
-
 type Term =
     | Var of name : string
     | Pair of l : Term * r : Term
@@ -348,6 +347,9 @@ let rec normalize (t : Term) =
     | None ->
         t
 
+//let isBot ((t : Term) (ty : Ty) =
+//    match (t, Ty) with
+    
 type Context = { venv : Map<string,Ty> ; tenv : Set<string> }
 
 let rec typeCheck (ctxt : Context) (t : Term) : Check<Ty> =
@@ -541,3 +543,26 @@ let rec typeCheck (ctxt : Context) (t : Term) : Check<Ty> =
                     err ("Computed letrec body type " + tyBody.ToString() + " does not matched ascribed type " + codTy.ToString())
             return Fun(domTy, tyBody)
         }
+
+let forEach (pSrcTy : Ty) (pDestTy : Ty) (pFun : Term) (pList : Term) : Term =
+    let forEachFun = 
+        LetRec("!f", "!l", List(pSrcTy), List(pDestTy), 
+            ListCase(Var("!l"), EmptyList(pDestTy), Abs("!h", pSrcTy, Abs("!t", List(pSrcTy), 
+                Cons(App(pFun, Var("!h")), App(Var("!f"), Var("!t")))))))
+    App(forEachFun, pList)
+
+let append (pElemTy : Ty) (pList1 : Term) (pList2 : Term) =
+    let appendFun = Abs("!l1", List(pElemTy), LetRec("!f", "!l2", List(pElemTy), List(pElemTy),
+        ListCase(Var("!l1"),
+            Var("!l2"),
+            Abs("!h", pElemTy, Abs("!t", List(pElemTy), Cons(Var("!h"), App(Var("!f"), Var("!t"))))))))
+    App(App(appendFun, pList1), pList2)
+
+let fold (srcTy : Ty) (destTy : Ty) (g : Term) (l : Term) (init : Term) =
+    let fn =
+        LetRec("!f", "!l", List(srcTy), destTy,
+            ListCase(Var("!l"),
+                init,
+                Abs("!h", srcTy, Abs("!t", List(srcTy), 
+                    App(App(g, Var("!h")), App(Var("!f"), Var("!t")))))))
+    App(fn, l)

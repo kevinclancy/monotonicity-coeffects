@@ -249,6 +249,38 @@ let geq (t1 : P.Term) : P.Term =
 
 let primGeq = P.PrimFun("geq", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.pBoolTy), geq)
 
+let maxNat (t : P.Term) =
+    match t with
+    | P.PrimNatVal(m) ->
+        let maxNat' (s : P.Term) =
+            match s with
+            | P.PrimNatVal(n) ->
+                P.PrimNatVal(Math.Max(m,n))
+            | _ ->
+                failwith "This program has 'gone wrong'. Oops."
+
+        P.Abs("n", P.Prim("Nat"), P.App(PrimFun("maxNat'", P.Prim("Nat"), P.Prim("Nat"), maxNat'), P.Var("n")))
+    | _ ->
+        failwith "this program has 'gone wrong'. oops."    
+
+let primMaxNat = P.PrimFun("maxNat", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.Prim("Nat")), maxNat)
+
+let minNat (t : P.Term) =
+    match t with
+    | P.PrimNatVal(m) ->
+        let minNat' (s : P.Term) =
+            match s with
+            | P.PrimNatVal(n) ->
+                P.PrimNatVal(Math.Min(m,n))
+            | _ ->
+                failwith "This program has 'gone wrong'. Oops."
+
+        P.Abs("n", P.Prim("Nat"), P.App(PrimFun("minNat'", P.Prim("Nat"), P.Prim("Nat"), minNat'), P.Var("n")))
+    | _ ->
+        failwith "this program has 'gone wrong'. oops."    
+
+let primMinNat = P.PrimFun("minNat", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.Prim("Nat")), minNat)
+
 let baseVEnv =
     Map<string, Ast.Ty * P.Term>(
         [("plus", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Nat", noRange), noRange), noRange), 
@@ -267,6 +299,10 @@ let baseVEnv =
                   primLeq))
          ("geq", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectAntitone, TyId("Bool", noRange), noRange), noRange),
                   primGeq))
+         ("max", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Nat", noRange), noRange), noRange), 
+                   primMaxNat))
+         ("min", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Nat", noRange), noRange), noRange), 
+                   primMinNat))
          //("eq", (FunTy(TyId("Nat",noRange), CoeffectAny, FunTy(TyId("Nat",noRange), CoeffectAny, TyId("Bool", noRange), noRange), noRange))
         // TODO: we need primitive unit values in syntax
          ("unit", (TyId("Unit", noRange),

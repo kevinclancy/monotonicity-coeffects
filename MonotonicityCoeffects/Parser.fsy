@@ -16,7 +16,7 @@ open Ast
 %token AT DOT PLUS MINUS QUESTION ASTERISK LPAREN RPAREN IN LET END EOF FST SND COMMA OF CASE 
 %token INL INR TO CAP UNCAP PIPE TYPES SEMICOLON LBRACK RBRACK BANG
 %token HASH DICT TOSET POSET SEMILATTICE FORALL BIGFORALL IMPLIES ARROW
-%token LSQUAREBRACKET RSQUAREBRACKET LARROW AND TYPEFUN COLONS WITH LESSTHAN
+%token LSQUAREBRACKET RSQUAREBRACKET LARROW AND TYPEFUN COLONS WITH LESSTHAN HOM
 
 %right ARROW DICT PLUS ASTERISK IMPLIES
 
@@ -67,6 +67,7 @@ Expr: INT                        { Int($1, parseState.ResultRange) }
 	| TRUE                      { Bool(true, parseState.ResultRange) }
 	| FALSE                     { Bool(false, parseState.ResultRange) }
 	| FUN ParList END { $2 }
+	| HOM LPAREN ID COLON Ty DOT Ty RPAREN Expr END { Hom($3, $5, $7, $9, parseState.ResultRange) }
 	| LET LetList { $2 }
 	| CONST { Const($1, parseState.ResultRange) }
 	| ID { Var($1, parseState.ResultRange) }
@@ -98,7 +99,7 @@ Scalar: PLUS         { CoeffectMonotone }
 TyList : TyList Ty { TyApp($1,$2, parseState.ResultRange) }
        | Ty { $1 }
 
-Ty: LPAREN Ty Scalar RPAREN { Capsule($2, $3, parseState.ResultRange) }
+Ty: LPAREN Scalar Ty RPAREN { Capsule($3, $2, parseState.ResultRange) }
   | Ty ARROW Scalar Ty { FunTy($1,$3,$4, parseState.ResultRange) }
   | Ty DICT Ty { Dictionary($1,$3, parseState.ResultRange) }
   | Ty PLUS Ty { Sum($1,$3, parseState.ResultRange) }
