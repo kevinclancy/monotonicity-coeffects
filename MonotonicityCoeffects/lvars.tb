@@ -1,0 +1,53 @@
+types
+  Set = typefun (x : TOSET) x |> Bool end;
+  NodeId = Nat;
+  NodeSet = (Set NodeId);
+  Graph = NodeId |> NodeSet;
+in
+
+let equal =
+
+	fun (A : TOSET) (x : A) (y : A)
+		(bAnd 
+		  (bNot (x < y)) 
+		  (bNot (y < x)))
+	end
+
+and monoIf = 
+
+  fun (src : SEMILATTICE) (dest : SEMILATTICE) (cond : src) (res : dest)
+      let extract to dest with k v acc = { unit -> cond : Unit |> src } in
+		res
+      end
+  end
+
+and lookup = 
+
+  fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K)
+    let extract to V with k2 v acc = d
+    in (monoIf !Bool !V (equal !K k k2) v)
+    end 
+  end
+
+and neighbors =
+  
+  fun (g : Graph) 
+    hom (x : NodeSet . (?Nat)*Unit)
+      let cap ? n = fst x 
+      in (lookup !NodeId !NodeSet g n)
+      end
+    end
+  end 
+and graph =
+ 
+  {
+    1 -> { 2 -> true, 3 -> true : NodeSet },
+    2 -> { 4 -> true, 5 -> true : NodeSet },
+    6 -> { 7 -> true, 3 -> true : NodeSet },
+    8 -> { 9 -> true, 10 -> true : NodeSet }
+    : Graph
+  }
+
+in
+ (neighbors graph { 1 -> true, 8 -> true : NodeSet })
+end
