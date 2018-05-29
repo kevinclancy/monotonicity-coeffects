@@ -42,22 +42,15 @@ and filter =
 and comp =
 	fun (A : TOSET) (B : TOSET) (C : TOSET)
 		(x : MultiRel A B) (y : MultiRel B C)
-		
-		let extract to (MultiRel A C) with ab m1 acc1 = x in
-			let resAB = 
-				let extract to (MultiRel A C) with bc m2 acc2 = y
-				and a = fst ab
-				and b1 = snd ab
-				and b2 = fst bc
-				and c = snd bc
-				and m3 = (monoIf !Bool !Nat (equal !B b1 b2) (mult m1 m2))
-				in (cons (a,c) m3 acc2)
-				end
-			in
-				(join (MultiRel A C) resAB acc1)
-			end
+		let extract to (MultiRel A C) with ab m1 acc1 = x
+	        and extract to (MultiRel A C) with bc m2 acc2 = y 
+		and a = fst ab
+		and b1 = snd ab
+		and b2 = fst bc
+		and c = snd bc
+		and m3 = (monoIf !Bool !Nat (equal !B b1 b2) (mult m1 m2))
+		in (cons (a,c) m3 acc2)
 		end
-
 	end
 
 in
