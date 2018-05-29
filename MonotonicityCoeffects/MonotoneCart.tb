@@ -1,5 +1,5 @@
 ﻿types
-  Set = typefun (x : TOSET) x |> Bool end; 
+  Set = typefun (x : TOSET) x |> Bool end;
   ActionId = Nat;
   ItemId = Nat;
   NetworkAddr = Nat;
@@ -46,7 +46,7 @@ and isComplete =
 			let extract to (Set ActionId) with idAction isMember seen = actions
 			and id = fst idAction 
 			and act = snd idAction in
-				(monoIf !Bool !(Set ActionId) (bAnd (leq lo id) (leq id hi)) seen)
+				(monoIf !Bool !(Set ActionId) (bAnd (leq lo id) (leq id hi)) { id -> true : (Set ActionId) })
 			end
 		in
 			let numIds = (setCount !ActionId setIds) in
