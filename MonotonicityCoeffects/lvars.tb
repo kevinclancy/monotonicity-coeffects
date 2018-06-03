@@ -1,7 +1,7 @@
 types
   Set = typefun (x : TOSET) x |> Bool end;
   NodeId = Nat;
-  NodeSet = (Set NodeId);
+  NodeSet = Set NodeId;
   Graph = NodeId |> NodeSet;
 in
 
@@ -33,6 +33,8 @@ and neighbors =
   
   fun (g : Graph) 
     hom (x : NodeSet . (?Nat)*Unit)
+      // when we extract the natural number n from a ?-capsule, we can use n 
+      // arbitrarily, while still using the capsule (fst x) monotonically
       let cap ? n = fst x 
       in (lookup !NodeId !NodeSet g n)
       end

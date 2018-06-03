@@ -30,7 +30,7 @@ and multiplicity =
 and bagIntersect =
 
     fun (ElemTy : TOSET) (x : Bag ElemTy) 
-        hom (y : (Bag ElemTy) . (?ElemTy) * Nat)
+        hom (y : Bag ElemTy . (?ElemTy) * Nat)
           let cap ? elem = fst y
           and m = snd y
           in { elem -> (min (multiplicity !ElemTy x elem) m) : (Bag ElemTy) }
