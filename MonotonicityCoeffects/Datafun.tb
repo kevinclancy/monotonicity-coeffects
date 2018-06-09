@@ -29,6 +29,14 @@ and map =
 		end
 	end
 
+and lookup = 
+
+  fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K)
+    let extract to V with k2 v acc = d
+    in (monoIf !Bool !V (equal !K k k2) v)
+    end 
+  end
+
 and filter =
 
   fun (elemTy : TOSET) (f : elemTy ->? Nat ->+ Bool) (bag : Bag elemTy)
@@ -41,22 +49,28 @@ and filter =
 
 and comp =
 	fun (A : TOSET) (B : TOSET) (C : TOSET)
-		(x : MultiRel A B) (y : MultiRel B C)
+		(x : MultiRel A B) (y : MultiRel B C) :: (MultiRel A C) @(+ x, + y)
 		let extract to (MultiRel A C) with ab m1 acc1 = x
-	        and extract to (MultiRel A C) with bc m2 acc2 = y 
+	    and extract to (MultiRel A C) with bc m2 acc2 = y 
 		and a = fst ab
 		and b1 = snd ab
 		and b2 = fst bc
 		and c = snd bc
 		and m3 = (monoIf !Bool !Nat (equal !B b1 b2) (mult m1 m2))
-		in (cons (a,c) m3 acc2)
+		in { (a,c) -> (plus (lookup !(A * C) !Nat acc1 (a,c)) m3)  : MultiRel A C }
 		end
 	end
 
 in
+    //(lookup !(Nat*Nat) !Nat
+    //  (comp !Nat !Nat !Nat
+    //         {(1,4) -> 2 : MultiRel Nat Nat}
+    //         {(3,2) -> 5, (4,2) -> 2 : MultiRel Nat Nat})
+    //  (1,2))
+    //{ (1,4) -> 2, (2,3) -> 4, (1,3) -> 2 : (MultiRel Nat Nat) }
 	(comp !Nat !Nat !Nat
-	      { (1,3) -> 2, (2,3) -> 4  : (MultiRel Nat Nat) } 
-	      { (3,2) -> 5 : (MultiRel Nat Nat) })
+	      { (1,3) -> 2, (2,3) -> 4,  (1,4) -> 2 : (MultiRel Nat Nat) } 
+	      { (3,2) -> 5, (4,2) -> 2 : (MultiRel Nat Nat) })
 end
 
 

@@ -22,6 +22,7 @@
     <None Include="BloomAPI.tb" />
     <None Include="Lexer.fsl" />
     <None Include="Datafun.tb" />
+    <None Include="lvars.tb" />
     <None Include="MonotoneCart.tb" />
     <None Include="test.tb" />
     <None Include="Parser.fsy" />
