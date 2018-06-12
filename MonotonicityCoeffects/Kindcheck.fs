@@ -11,8 +11,8 @@ let V = P.Var
 let Ap = P.App
 let Ab = P.Abs
 let ListCase = P.ListCase
-let BoolCase (scrut : P.Term, fCase : P.Term, tCase : P.Term) =
-    P.SumCase(scrut, P.Abs("_",P.Unit, fCase), P.Abs("_",P.Unit, tCase))
+let BoolCase (scrut : P.Term, tCase : P.Term, fCase : P.Term) =
+    P.SumCase(scrut, P.Abs("_",P.Unit, tCase), P.Abs("_",P.Unit, fCase))
 let P1 = P.Proj1
 let P2 = P.Proj2
 let I1 = P.In1
@@ -111,7 +111,7 @@ let makeIVarSemilat (elemTy : Ast.Ty) (pElemTy : P.Ty) (elemComp : P.Term) : P.T
                             P.Cons(P.Var("!xh"), P.App(P.App(V("!f"), V("!xt")), V("!y"))),
                             BoolCase(P.App(P.App(elemComp, P.Proj1(V("!yh"))), P.Proj1(V("!xh"))),
                                 P.Cons(V("!yh"), P.App(P.App(V("!f"), V("!x")), V("!yt"))),
-                                P.Cons(V("!xh"), P.App(P.App(V("!f"),V("!xt")), V("!yt")))))))))))))
+                                P.App(P.App(V("!f"),V("!xt")), V("!yt"))))))))))))
     let deltaTy = elemTy
     let pIso = P.Abs("!x", resTy, P.Var("!x"))
     resTy, bot, join, deltaTy, pIso
@@ -145,7 +145,9 @@ let makeProdToset (pTyL : P.Ty) (compL : P.Term) (pTyR : P.Ty) (compR : P.Term)
     resTy,
     P.Abs("!x", resTy, P.Abs("!y", resTy, BoolCase(P.App(P.App(compL, P.Proj1(P.Var("!x"))),P.Proj1(P.Var("!y"))),
                                                     pcfTrue,
-                                                    P.App(P.App(compR, P.Proj2(P.Var("!x"))),P.Proj2(P.Var("!y"))))))
+                                                    BoolCase(P.App(P.App(compL, P.Proj1(P.Var("!y"))),P.Proj1(P.Var("!x"))),
+                                                      pcfFalse,
+                                                      P.App(P.App(compR, P.Proj2(P.Var("!x"))),P.Proj2(P.Var("!y")))))))
 
 let makeSumToset (pTyL : P.Ty) (compL : P.Term) (pTyR : P.Ty) (compR : P.Term) =
     let resTy = P.Sum(pTyL, pTyR)
