@@ -154,7 +154,7 @@ let makeSumToset (pTyL : P.Ty) (compL : P.Term) (pTyR : P.Ty) (compR : P.Term) =
     resTy,
     P.Abs("!x", resTy, P.Abs("!y", resTy, 
         P.SumCase(P.Var("!x"), 
-                P.Abs("!x'", pTyL, P.SumCase(P.Var("!y"), P.Abs("!y'", pTyL, P.App(P.App(compL,P.Var("!x'")), P.Var("!y'"))), P.Abs("!_", pTyL, pcfFalse))),
+                P.Abs("!x'", pTyL, P.SumCase(P.Var("!y"), P.Abs("!y'", pTyL, P.App(P.App(compL,P.Var("!x'")), P.Var("!y'"))), P.Abs("!_", pTyL, pcfTrue))),
                 P.Abs("!x'", pTyR, P.SumCase(P.Var("!y"), P.Abs("!y'", pTyR, P.App(P.App(compR,P.Var("!x'")), P.Var("!y'"))), P.Abs("!_", pTyR, pcfFalse))))))          
 
 /// kCheckToset tenv ty = res
