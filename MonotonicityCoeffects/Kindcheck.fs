@@ -112,7 +112,7 @@ let makeIVarSemilat (elemTy : Ast.Ty) (pElemTy : P.Ty) (elemComp : P.Term) : P.T
                             BoolCase(P.App(P.App(elemComp, P.Proj1(V("!yh"))), P.Proj1(V("!xh"))),
                                 P.Cons(V("!yh"), P.App(P.App(V("!f"), V("!x")), V("!yt"))),
                                 P.App(P.App(V("!f"),V("!xt")), V("!yt"))))))))))))
-    let deltaTy = elemTy
+    let deltaTy = Ast.Capsule(elemTy, CoeffectAny, noRange)
     let pIso = P.Abs("!x", resTy, P.Var("!x"))
     resTy, bot, join, deltaTy, pIso
 
