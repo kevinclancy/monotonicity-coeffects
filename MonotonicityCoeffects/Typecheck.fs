@@ -34,6 +34,8 @@ let contr (a : Map<string, Coeffect>) (b : Map<string, Coeffect>) : Map<string, 
 /// Scalar/vector coeffect composition
 let comp (q : Coeffect) (a : Map<string, Coeffect>) : Map<string, Coeffect> =
     Map.map (fun k r -> (q %% r)) a
+
+let foundHole : Ref< Option<Context * Range> > = ref None
     
 let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Term> =
     let tenv,venv = ctxt.tenv, ctxt.venv
@@ -464,15 +466,24 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
         check {
             let! exprTy, exprQ, exprTerm = withError errorMsg rng (typeCheck ctxt expr)
             do! withError errorMsg rng (Ty.IsSubtype ctxt.tenv.tyAliasEnv exprTy ty)
-            return exprTy, exprQ, exprTerm
+            return ty, exprQ, exprTerm
         }
+    | Hole(rng) ->
+        foundHole := Some(ctxt, rng)
+        Error []
+
+
     
   
 // type TypeEnvironment = { tyVarEnv : Map<string, Kind> ; tyBaseEnv : Map<string, Kind> }
 // type ValueEnvironment = Map<string, Ty>
 // type Context = { tenv : TypeEnvironment ; venv : ValueEnvironment }
 
-let progCheck (ctxt : Context) (p : Prog) : Check<Ty * CoeffectMap * P.Term> = 
+type ProgCheckResult =
+    | CheckResult of Check<Ty * CoeffectMap * P.Term>
+    | FoundHole of Context * Range
+
+let progCheck (ctxt : Context) (p : Prog) : ProgCheckResult = 
     let foldAlias (acc : Check<TypeEnvironment>) ((n,ty) : string * Ty) =
         match acc with
         | Error(stack) ->
@@ -483,11 +494,17 @@ let progCheck (ctxt : Context) (p : Prog) : Check<Ty * CoeffectMap * P.Term> =
                 Result { tenv with tyAliasEnv = tenv.tyAliasEnv.Add(n,ty) }
             | Error(stack) ->
                 Error(stack)
-
-    check {
-        let tenvCheck = Result ctxt.tenv
-        let! tenv = List.fold foldAlias tenvCheck p.typeAliases
-        let! ty,R,pTerm = typeCheck { ctxt with tenv = tenv } p.body
-        let! _ = P.typeCheck { venv = Map.empty ; tenv = Set.empty } pTerm
-        return ty,R,pTerm
-    }
+    foundHole := None
+    let tyCheckRes =
+        check {
+            let tenvCheck = Result ctxt.tenv
+            let! tenv = List.fold foldAlias tenvCheck p.typeAliases
+            let! ty,R,pTerm = typeCheck { ctxt with tenv = tenv } p.body
+            let! _ = P.typeCheck { venv = Map.empty ; tenv = Set.empty } pTerm        
+            return ty,R,pTerm
+        }
+    match foundHole.Value with
+    | Some(ctxt, rng) ->
+        FoundHole(ctxt, rng)
+    | None ->
+        CheckResult(tyCheckRes)

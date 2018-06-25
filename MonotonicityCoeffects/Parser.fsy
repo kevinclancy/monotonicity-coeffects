@@ -7,6 +7,8 @@ open Ast
 %type < Ast.Prog > start
 %start Ty
 %type < Ast.Ty > Ty
+%start ExprList
+%type < Ast.Expr > ExprList
 
 %token <string> ID CONST
 %token <System.Int32> INT
@@ -17,6 +19,7 @@ open Ast
 %token INL INR TO CAP UNCAP PIPE TYPES SEMICOLON LBRACK RBRACK BANG
 %token HASH DICT TOSET POSET SEMILATTICE FORALL BIGFORALL IMPLIES ARROW
 %token LSQUAREBRACKET RSQUAREBRACKET LARROW AND TYPEFUN COLONS WITH LESSTHAN HOM
+%token HOLE
 
 %right ARROW DICT PLUS ASTERISK IMPLIES
 
@@ -90,6 +93,7 @@ Expr: INT                        { Int($1, parseState.ResultRange) }
 	| AT LPAREN CoeffectAscriptionList RPAREN Expr { CoeffectAscription($3, $5, parseState.ResultRange) } 
 	| COLONS Ty Expr { TypeAscription($2,$3, parseState.ResultRange) }
 	| LBRACK EntryList { $2 }
+    | HOLE { Hole(parseState.ResultRange) }
 
 Scalar: PLUS         { CoeffectMonotone }
       | MINUS        { CoeffectAntitone }

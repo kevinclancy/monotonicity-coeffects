@@ -313,14 +313,116 @@ let baseVEnv =
 let tenv = { tyVarEnv = Map.empty ; tyBaseEnv = baseTyMap; tyAliasEnv = Map.empty }
 let ctxt = { tenv = tenv ; venv = Map.empty ; bvenv = baseVEnv}
 
+let help = """
+The McLambda repl provides the following commands:
+help                      --  Display this text
+showContext               --  Show typing context
+checkSemilat *type*       --  Checks that the provided type is a semilattice type and prints its delta type
+checkToset *type*         --  Checks that the provided type is a toset type
+checkPoset *type*         --  Checks that the provided type is a poset type
+typeCheck *expr           --  Typechecks the provided expression, printing its type and coeffect
+exit                      --  Shuts down the repl"""
+
 let rec printStack (stack : List<string*Range>) =
     match stack with
     | (error,(startPos,_)) ::  rest ->
-        let location = "line: " + startPos.Line.ToString() + " column: " + startPos.Column.ToString() 
+        let location = "line: " + (startPos.Line + 1).ToString() + " column: " + startPos.Column.ToString() 
         printfn ("%s\n  %s\n") location error
         printStack rest
     | [] ->
         ()
+
+let printVenv (ctxt : Typecheck.Context) : Unit =
+    let printVenvEntry (k : string, v : Ast.Ty) : string =
+        k + " : " + v.ToString() 
+    printfn "%s\n" (String.concat "\n" (List.map printVenvEntry (Map.toList ctxt.venv)))    
+
+let rec repl (ctxt : Typecheck.Context) =
+    printf "> "
+    let commandStr = Console.In.ReadLine()
+    match commandStr with
+    | "exit" ->
+        ()
+    | "help" ->
+        printfn "%s" help
+    | "showContext" ->
+        printVenv ctxt 
+    | _ ->
+        let firstSpace = commandStr.IndexOf(' ')
+        match firstSpace with
+        | -1 ->
+            printfn "%s is not a valid command. Type 'help' for a list of valid commands." commandStr
+        | n ->
+            let commandName = commandStr.Substring(0, firstSpace)
+            let param = commandStr.Substring(firstSpace)
+            match commandName with
+            | "checkSemilat" ->
+                let reader = new StringReader(param)
+                let lexbuffer : LexBuffer<char> = LexBuffer.FromString(reader.ReadToEnd()) 
+                try 
+                    let ty = Parser.Ty(Lexer.token) lexbuffer
+                    match kCheckSemilattice ctxt.tenv ty with
+                    | Result(_,_,_,ty0,_) ->
+                        printfn "Semilattice formation check succeeded:\n%s is a semilattice type with delta type %s"
+                                param
+                                (ty0.ToString())
+                    | Error(stack) ->
+                        printStack stack
+                with
+                | e ->
+                    let message = e.Message
+                    printfn "Parse error. Line: %d, Column: %d" (lexbuffer.StartPos.Line + 1) (lexbuffer.StartPos.Column)
+            | "checkPoset" ->
+                let reader = new StringReader(param)
+                let lexbuffer : LexBuffer<char> = LexBuffer.FromString(reader.ReadToEnd()) 
+                try 
+                    let ty = Parser.Ty(Lexer.token) lexbuffer
+                    match kCheckProset ctxt.tenv ty with
+                    | Result(_) ->
+                        printfn "Poset formation check succeeded:\n%s is a poset type"
+                                param
+                    | Error(stack) ->
+                        printStack stack
+                with
+                | e ->
+                    let message = e.Message
+                    printfn "Parse error. Line: %d, Column: %d" (lexbuffer.StartPos.Line + 1) (lexbuffer.StartPos.Column)
+            | "checkToset" ->
+                let reader = new StringReader(param)
+                let lexbuffer : LexBuffer<char> = LexBuffer.FromString(reader.ReadToEnd()) 
+                try 
+                    let ty = Parser.Ty(Lexer.token) lexbuffer
+                    match kCheckToset ctxt.tenv ty with
+                    | Result(_,_) ->
+                        printfn "Poset formation check succeeded:\n%s is a toset type"
+                                param
+                    | Error(stack) ->
+                        printStack stack
+                with
+                | e ->
+                    let message = e.Message
+                    printfn "Parse error. Line: %d, Column: %d" (lexbuffer.StartPos.Line + 1) (lexbuffer.StartPos.Column)
+            | "typeCheck" ->
+                let reader = new StringReader(param)
+                let lexbuffer : LexBuffer<char> = LexBuffer.FromString(reader.ReadToEnd())
+                try
+                    let expr = Parser.ExprList (Lexer.token) lexbuffer
+                    match Typecheck.typeCheck ctxt expr with
+                    | Result(ty,coeffect,_) ->
+                        let coeffectEntryStr (k : string, v : Coeffect) =
+                            k + " ==> " + v.ToString() 
+                        printfn "Computed type: %s\n%s"
+                                (ty.ToString())
+                                (String.concat "\n" (List.map coeffectEntryStr (Map.toList coeffect)))
+                    | Error(stack) ->
+                        printStack stack
+                with
+                | e ->
+                    let message = e.Message
+                    printfn "Parse error. Line: %d, Column: %d" (lexbuffer.StartPos.Line + 1) (lexbuffer.StartPos.Column)
+            | unknownCommandName ->
+                printfn "Command name '%s' unknown" unknownCommandName
+    repl ctxt
 
 [<EntryPoint>]
 let main argv =
@@ -333,15 +435,20 @@ let main argv =
           with
           | e ->
             let message = e.Message
-            printfn "Parse error. Line: %d, Column: %d" (lexbuffer.StartPos.Line + 1) lexbuffer.StartPos.Column
+            printfn "Parse error. Line: %d, Column: %d" (lexbuffer.StartPos.Line + 1) (lexbuffer.StartPos.Column * 2)
             exit 1
         
         match progCheck ctxt ty with
-        | Error(stack) ->
+        | CheckResult(Error(stack)) ->
             printStack stack
-        | Result(ty,R,pTerm) ->
+        | CheckResult(Result(ty,R,pTerm)) ->
             let result = normalize pTerm
             printf "Successfully checked program.\nType: %s\nValue: %s\n" (ty.ToString()) (result.ToString())
+        | FoundHole(ctxt, (startPos, _)) ->
+            printfn "found hole at Line: %d, Column: %d ...\n" (startPos.Line + 1) (startPos.Column * 2)
+            printVenv ctxt
+            printfn "Type 'help' to show recognized commands\n"
+            repl ctxt
         0 // return an integer exit code
     with 
     | :? IndexOutOfRangeException ->

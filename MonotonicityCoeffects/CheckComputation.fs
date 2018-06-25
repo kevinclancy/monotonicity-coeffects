@@ -1,7 +1,5 @@
 ﻿module CheckComputation
 
-// I don't actually use this very much: it would have been more useful if I had written this *before* the type-checking code
-
 open Microsoft.FSharp.Text.Lexing
 
 type Range = Position * Position

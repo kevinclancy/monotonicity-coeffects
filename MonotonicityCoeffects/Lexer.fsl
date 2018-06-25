@@ -44,6 +44,7 @@ rule token = parse
 | "="            { EQUAL }
 | "!"            { BANG }
 | "@"			 { AT }
+| "##"           { HOLE }
 | "."	         { DOT }
 | "of"			 { OF }
 | "to"			 { TO }

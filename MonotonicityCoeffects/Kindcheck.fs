@@ -245,8 +245,6 @@ let rec kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Check<SemPoset * SemTos
 /// kCheckSemilattice tenv ty = res 
 /// tenv - the type environment to check under
 /// ty - the type to check
-/// ty0 - If ty is a semilattice type, None
-///       Otherwise, Some explanation, where explanation is an error stack
 /// res = pTy, pBot, pJoin, tyDelta
 /// where
 ///   pTy - Is the PCF translation of ty

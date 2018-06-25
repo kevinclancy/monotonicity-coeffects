@@ -417,6 +417,7 @@ type Expr =
   | MRet of expr : Expr * Range
   | CoeffectAscription of assertions : List<Coeffect * string> * body : Expr * Range
   | TypeAscription of ty : Ty * body : Expr * Range
+  | Hole of Range
 
   override this.ToString() =
     match this with
@@ -482,4 +483,7 @@ type Expr =
         "::" + ty.ToString() + " " + expr.ToString()
     | Hom(varId, tySemilat, tyDelta, body, rng) ->
         "(hom (" + varId + " : " + tySemilat.ToString() + " . " + tyDelta.ToString() + ") " + body.ToString() + ")"
+    | Hole(rng) ->
+        "##"
+  
   type Prog = { typeAliases : List<string * Ty> ; exprAliases : Map<string,Expr> ; body : Expr }
