@@ -521,3 +521,83 @@ type Expr =
         "##"
   
   type Prog = { typeAliases : List<string * Ty> ; exprAliases : Map<string,Expr> ; body : Expr }
+
+// converts a PCF value into a LambdaMC value
+let rec toMC (tyAliases : Map<string, Ty>) (t : PCF.Term) (ty : Ty) (tyName : Option<string>) : string =
+    match ty, t with
+    | TyId(name,_), PCF.PrimUnitVal when name = "Unit" ->
+        "()"
+    | TyId(name,_), _ when name = "Bool" ->
+        match t with
+        | PCF.PCFBool(true) ->
+            "true"
+        | PCF.PCFBool(false) ->
+            "false"
+    | TyId(name,_), PCF.PrimNatVal(n) when name = "Nat" ->
+        n.ToString()
+    | TyId(name,_), _ ->
+        match tyAliases.TryFind(name) with
+        | Some(ty') ->
+            toMC tyAliases t ty' (Some name)
+        | None ->
+            failwith "unknown type"
+    | FunTy(_,_,_,_), _ ->
+        "function"
+    | Dictionary(dom,cod,_), PCF.Cons(hd, rest) ->
+        "{" + toMCDictionary tyAliases t dom cod + " : " + Option.defaultValue (ty.ToString()) tyName + "}" 
+    | Capsule(ty',_,_), _ ->
+        toMC tyAliases t ty' None
+    | Prod(tyL, tyR, _), PCF.Pair(t1, t2) ->
+        "(" + (toMC tyAliases t1 tyL None) + ", " + (toMC tyAliases t2 tyR None) + ")"
+    | Sum(tyL, _, _), PCF.In1(_,_,t') ->
+        "inl " + (toMC tyAliases t' tyL None)
+    | Sum(_, tyR, _), PCF.In2(_,_,t') ->
+        "inr " + toMC tyAliases t' tyR None
+    | IVar(ty',_), t ->
+        "|" + toMCIVar tyAliases t ty' + "|"
+    | ForallTy(_,_,_,_), _ ->
+        "forall"
+    | Partial(ty',_), PCF.In1(_,_,t') ->
+        "[" + toMC tyAliases t' ty' None + "]"
+    | Partial(ty',_), PCF.In2(_,_,_) ->
+        "error"
+    | TyApp(forallTy, argTy, rng), t ->
+        (toMC tyAliases t (Ty.reduce tyAliases ty).Value (Some(Option.defaultValue (ty.ToString()) tyName)))
+
+and toMCIVar (tyAliases : Map<string, Ty>) (t : PCF.Term) (tyContents : Ty) : string =
+    match t with
+    | PCF.Cons(e, PCF.EmptyList(_)) ->
+      (toMC tyAliases e tyContents None)
+    | PCF.Cons(e, rest) ->
+      (toMC tyAliases e tyContents None) + ", " + (toMCIVar tyAliases rest tyContents)
+
+and toMCDictionary (tyAliases : Map<string, Ty>) (t : PCF.Term) (dom : Ty) (cod : Ty) : string  =    
+    match t with
+    | PCF.Cons(PCF.Pair(k,v), PCF.EmptyList(_)) ->
+      toMC tyAliases k dom None + " -> " + toMC tyAliases v cod None
+    | PCF.Cons(PCF.Pair(k,v), rest) ->
+      toMC tyAliases k dom None + " -> " + toMC tyAliases v cod None + ", " + toMCDictionary tyAliases rest dom cod
+
+//        match this with
+//        | TyId(name,_) ->
+//            name
+//        | FunTy(dom,q,cod,_) ->
+//            "(" + dom.ToString() + " ->" + q.ToString() + " " + cod.ToString() + ")"
+//        | Dictionary(dom,cod,_) ->
+//            "(" + dom.ToString() + " |> " + cod.ToString() + ")"
+//        | Capsule(ty,q,_) ->
+//            "(" + q.ToString() + " " + ty.ToString() + ")"
+//        | Prod(tyL, tyR, _) ->
+//            "(" + tyL.ToString() + " * " + tyR.ToString() + ")"
+//        | Sum(tyL, tyR, _) ->
+//            "(" + tyL.ToString() + " + " + tyR.ToString() + ")"
+//        | IVar(tyContents,_) ->
+//            "!" + tyContents.ToString() + "!"
+//        | TyOp(varId, kind, body,_) ->
+//            "(TypeFun (" + varId + " : " + kind.ToString() + "). " + body.ToString() + ")"
+//        | ForallTy(varId, kind, body,_) ->
+//            "(Forall (" + varId + " : " + kind.ToString() + "). " + body.ToString() + ")"
+//        | Partial(ty,_) ->
+//            "[" + ty.ToString() + "]"
+//        | TyApp(forallTy, argTy, rng) ->
+//            "(" + forallTy.ToString() + " " + argTy.ToString() + ")" 

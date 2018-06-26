@@ -486,7 +486,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
 // type Context = { tenv : TypeEnvironment ; venv : ValueEnvironment }
 
 type ProgCheckResult =
-    | CheckResult of Check<Ty * CoeffectMap * P.Term>
+    | CheckResult of Check<Ty * CoeffectMap * P.Term * TypeEnvironment>
     | FoundHole of Context * Range
 
 let progCheck (ctxt : Context) (p : Prog) : ProgCheckResult = 
@@ -507,7 +507,7 @@ let progCheck (ctxt : Context) (p : Prog) : ProgCheckResult =
             let! tenv = List.fold foldAlias tenvCheck p.typeAliases
             let! ty,R,pTerm = typeCheck { ctxt with tenv = tenv } p.body
             let! _ = P.typeCheck { venv = Map.empty ; tenv = Set.empty } pTerm        
-            return ty,R,pTerm
+            return ty,R,pTerm,tenv
         }
     match foundHole.Value with
     | Some(ctxt, rng) ->

@@ -445,9 +445,10 @@ let main argv =
         match progCheck {ctxt with src = src} prog with
         | CheckResult(Error(stack)) ->
             printStack stack
-        | CheckResult(Result(ty,R,pTerm)) ->
+        | CheckResult(Result(ty,R,pTerm,tenv)) ->
             let result = normalize pTerm
-            printf "Successfully checked program.\nType: %s\nValue: %s\n" (ty.ToString()) (result.ToString())
+            let resultStr = toMC tenv.tyAliasEnv result ty (Some(ty.ToString()))
+            printf "Successfully checked program.\nType: %s\nValue: %s\n" (ty.ToString()) resultStr
         | FoundHole(ctxt, (startPos, _)) ->
             printfn "found hole at Line: %d, Column: %d ...\n" (startPos.Line + 1) (startPos.Column * 2)
             printVenv ctxt
