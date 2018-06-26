@@ -419,6 +419,40 @@ type Expr =
   | TypeAscription of ty : Ty * body : Expr * Range
   | Hole of Range
 
+  member this.GetRange() : Range =
+    match this with
+    | Int(_,rng)
+    | Bool(_,rng)
+    | Forall(_,_,_,rng)
+    | ForallApp(_,_,rng)
+    | Hom(_,_,_,_,rng)
+    | Abs(_,_,_,rng)
+    | App(_,_,rng)
+    | Const(_, rng)
+    | Var(_,rng)
+    | Bot(_,rng)
+    | Join(_,_,_,rng)
+    | LessThan(_,_,rng)
+    | Extract(_,_,_,_,_,_,rng)
+    | Cons(_,_,_,rng)
+    | Fst(_,rng)
+    | Snd(_,rng)
+    | Pair(_,_,rng)
+    | Case(_,_,_,_,_,_,rng)
+    | Inl(_,_,_,rng)
+    | Inr(_,_,_,rng)
+    | Cap(_,_,rng)
+    | Uncap(_,_,_,_,rng)
+    | ISet(_,rng)
+    | IGet(_,_,_,rng)
+    | Let(_,_,_,rng)
+    | MLet(_,_,_,rng)
+    | MRet(_,rng)
+    | CoeffectAscription(_,_,rng)
+    | TypeAscription(_,_,rng)
+    | Hole(rng) ->
+        rng
+
   override this.ToString() =
     match this with
     | Int(i,_) ->

@@ -566,3 +566,6 @@ let fold (srcTy : Ty) (destTy : Ty) (g : Term) (l : Term) (init : Term) =
                 Abs("!h", srcTy, Abs("!t", List(srcTy), 
                     App(App(g, Var("!h")), App(Var("!f"), Var("!t")))))))
     App(fn, l)
+
+// converts a PCF value into a LambdaMC value
+let toMC

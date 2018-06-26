@@ -12,7 +12,7 @@ module P = PCF
 
 type ValueEnvironment = Map<string, Ty>
 type PrimValueEnvironment = Map<string, Ty * P.Term>
-type Context = { tenv : TypeEnvironment ; venv : ValueEnvironment ; bvenv : PrimValueEnvironment }
+type Context = { tenv : TypeEnvironment ; venv : ValueEnvironment ; bvenv : PrimValueEnvironment ; src : string }
 
 type CoeffectMap = Map<string, Coeffect>
 
@@ -35,12 +35,18 @@ let contr (a : Map<string, Coeffect>) (b : Map<string, Coeffect>) : Map<string, 
 let comp (q : Coeffect) (a : Map<string, Coeffect>) : Map<string, Coeffect> =
     Map.map (fun k r -> (q %% r)) a
 
+
+/// Gets the substring of source code which expr was parsed from
+let getSource (ctxt : Context) (expr : Expr) : string =
+    let (lo, hi) = expr.GetRange()
+    ctxt.src.Substring(lo.AbsoluteOffset, hi.AbsoluteOffset - lo.AbsoluteOffset)
+
 let foundHole : Ref< Option<Context * Range> > = ref None
     
 let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Term> =
     let tenv,venv = ctxt.tenv, ctxt.venv
     let tyVarEnv, tyBaseEnv = tenv.tyVarEnv, tenv.tyBaseEnv
-    let errorMsg = "Expression " + expr.ToString() + " not well-typed"
+    let errorMsg = "Expression\n\n" + (getSource ctxt expr) + "\n\nnot well-typed"
     match expr with
     | Int(n, rng) ->
         if n >= 0 then
@@ -154,7 +160,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let! tyArg, qsArg, termArg = withError (errorMsg + ": argument position ill-typed") rng (typeCheck ctxt arg)
             let! codTy, qs, term =
                 match tyFun with
-                | FunTy(domTy, q, codTy, rng) ->
+                | FunTy(domTy, q, codTy, _) ->
                     check {
                         do! withError errorMsg rng (Ty.IsSubtype ctxt.tenv.tyAliasEnv tyArg domTy)
                         let qs = contr qsFun (comp q qsArg)
@@ -162,7 +168,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                         return (codTy, qs, term)
                     }
                 | _ ->
-                    Error [errorMsg + ": " + fn.ToString() + " has type " + tyFun.ToString() + " and cannot be applied ",rng]
+                    Error [errorMsg + ": " + (getSource ctxt fn) + " has type " + tyFun.ToString() + " and cannot be applied ",rng]
             return codTy, qs, term
         }
     | Var(name,rng) ->
@@ -212,7 +218,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 | Dictionary(domTy, codTy, _) ->
                     Result (domTy, codTy)
                 | _ ->
-                    let errorMsg' = ": dictionary expected for type of " + dict.ToString() + ", but " + dictTy.ToString() + " computed" 
+                    let errorMsg' = ": dictionary expected for type of " + (getSource ctxt dict) + ", but " + dictTy.ToString() + " computed" 
                     Error [errorMsg + errorMsg',rng]
             let! pKeyTy, pKeyComp = kCheckToset ctxt.tenv keyTy
             let! pValTy = kCheckProset ctxt.tenv valTy
@@ -256,14 +262,14 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 | Dictionary(domTy, codTy,_) ->
                     Result (domTy, codTy)
                 | _ ->
-                    let errorMsg' = ": type of " + e3.ToString() + " expected to be dictionary type, but computed " + dictTy.ToString()
+                    let errorMsg' = ": type of " + (getSource ctxt e3) + " expected to be dictionary type, but computed " + dictTy.ToString()
                     Error [errorMsg + errorMsg',rng]
             do! withError 
                     (errorMsg + ": key type " + keyTy.ToString() + " is not a subtype of dictionary domain type " + dKeyTy.ToString()) 
                     rng 
                     (Ty.IsSubtype ctxt.tenv.tyAliasEnv keyTy dKeyTy)
             do! withError 
-                    (errorMsg + ": value " + e2.ToString() + " is not a subtype of dictionary codomain " + dValTy.ToString())
+                    (errorMsg + ": value " + (getSource ctxt e2) + "'s type is not a subtype of dictionary codomain " + dValTy.ToString())
                     rng
                     (Ty.IsSubtype ctxt.tenv.tyAliasEnv valTy dValTy)
             let! _, pDictBot, pDictJoin,_,_ = kCheckSemilattice ctxt.tenv dictTy
@@ -378,7 +384,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
         check {
             let! contentsTy, contentsQ, pContentsTerm = withError errorMsg rng (typeCheck ctxt expr)
             let tosetErrorMsg =
-                (errorMsg + ": computed type " + contentsTy.ToString() + " for " + expr.ToString())
+                (errorMsg + ": computed type " + contentsTy.ToString() + " for " + (getSource ctxt expr))
             let! _, _ = withError tosetErrorMsg rng (kCheckToset ctxt.tenv contentsTy)
             let! pContentsTy = withError errorMsg rng (kCheckProset ctxt.tenv contentsTy)
             return IVar(contentsTy, noRange), comp CoeffectAny contentsQ, P.Cons(pContentsTerm, P.EmptyList(pContentsTy))
@@ -391,7 +397,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 | IVar(tyContents,_) ->
                     Result tyContents
                 | _ ->
-                    Error [errorMsg + ": " + expr.ToString() + " expected to have ivar type, but type " + ivarTy.ToString() + " was computed.", rng]
+                    Error [errorMsg + ": " + (getSource ctxt expr) + " expected to have ivar type, but type " + ivarTy.ToString() + " was computed.", rng]
             let! pTyContents = kCheckProset ctxt.tenv tyContents
             let venv' = venv.Add(varId, tyContents)
             let! bodyTy, bodyQ, pBodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } body)

@@ -311,7 +311,7 @@ let baseVEnv =
     )
 
 let tenv = { tyVarEnv = Map.empty ; tyBaseEnv = baseTyMap; tyAliasEnv = Map.empty }
-let ctxt = { tenv = tenv ; venv = Map.empty ; bvenv = baseVEnv}
+let ctxt = { tenv = tenv ; venv = Map.empty ; bvenv = baseVEnv ; src = ""}
 
 let help = """
 The McLambda repl provides the following commands:
@@ -325,8 +325,11 @@ exit                      --  Shuts down the repl"""
 
 let rec printStack (stack : List<string*Range>) =
     match stack with
+    | (error, rng) :: rest when rng = noRange ->
+        printfn "%s" error
+        printStack rest
     | (error,(startPos,_)) ::  rest ->
-        let location = "line: " + (startPos.Line + 1).ToString() + " column: " + startPos.Column.ToString() 
+        let location = "line: " + (startPos.Line + 1).ToString() + " column: " + startPos.Column.ToString()
         printfn ("%s\n  %s\n") location error
         printStack rest
     | [] ->
@@ -429,7 +432,8 @@ let main argv =
     try 
         let reader = new StreamReader(argv.[0])
         let lexbuffer : LexBuffer<char> = LexBuffer.FromString(reader.ReadToEnd())
-        let ty = 
+        let src = (new StreamReader(argv.[0])).ReadToEnd()
+        let prog = 
           try 
             Parser.start(Lexer.token) lexbuffer
           with
@@ -438,7 +442,7 @@ let main argv =
             printfn "Parse error. Line: %d, Column: %d" (lexbuffer.StartPos.Line + 1) (lexbuffer.StartPos.Column * 2)
             exit 1
         
-        match progCheck ctxt ty with
+        match progCheck {ctxt with src = src} prog with
         | CheckResult(Error(stack)) ->
             printStack stack
         | CheckResult(Result(ty,R,pTerm)) ->

@@ -58,6 +58,6 @@ and isComplete =
 in
 	let co = | ((4,6), 1337) | 
 	and actions = { (4, (add 40)) -> true , (5, (remove 50)) -> true, (6, (add 20)) -> true : (ActionId*Action) |> Bool }
-	in ## // (isComplete (co, actions))
+	in (isComplete 3) //(isComplete (co, actions))
 	end
 end
