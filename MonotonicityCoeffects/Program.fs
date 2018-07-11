@@ -348,8 +348,10 @@ let rec repl (ctxt : Typecheck.Context) =
         ()
     | "help" ->
         printfn "%s" help
+        repl ctxt
     | "showContext" ->
-        printVenv ctxt 
+        printVenv ctxt
+        repl ctxt
     | _ ->
         let firstSpace = commandStr.IndexOf(' ')
         match firstSpace with
@@ -397,7 +399,7 @@ let rec repl (ctxt : Typecheck.Context) =
                     let ty = Parser.Ty(Lexer.token) lexbuffer
                     match kCheckToset ctxt.tenv ty with
                     | Result(_,_) ->
-                        printfn "Poset formation check succeeded:\n%s is a toset type"
+                        printfn "Toset formation check succeeded:\n%s is a toset type"
                                 param
                     | Error(stack) ->
                         printStack stack
@@ -424,9 +426,8 @@ let rec repl (ctxt : Typecheck.Context) =
                     let message = e.Message
                     printfn "Parse error. Line: %d, Column: %d" (lexbuffer.StartPos.Line + 1) (lexbuffer.StartPos.Column)
             | unknownCommandName ->
-                printfn "Command name '%s' unknown" unknownCommandName
-    repl ctxt
-
+               printfn "Command name '%s' unknown" unknownCommandName
+        repl ctxt
 [<EntryPoint>]
 let main argv =
     try 

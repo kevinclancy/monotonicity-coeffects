@@ -1,0 +1,11 @@
+types
+  Set = typefun (x : TOSET) x |> Bool end;
+  ActionId = Nat;
+  ItemId = Nat;
+  NetworkAddr = Nat;
+  Action = ItemId + ItemId;
+  Checkout = (ActionId * ActionId) * NetworkAddr;
+  Cart = | Checkout | * (Set (ActionId * Action));
+in
+
+##
