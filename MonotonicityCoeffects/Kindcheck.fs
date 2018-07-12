@@ -382,7 +382,7 @@ and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty> =
     | Dictionary(dom, cod, rng) ->
         check {
             let! pTyDom,_ = withError (errorMsg + ": domain is not a toset") rng (kCheckToset tenv dom)
-            let! pTyCod = withError (errorMsg + ": codomain is not a poset") rng (kCheckProset tenv cod)
+            let! pTyCod,_,_,_,_ = withError (errorMsg + ": codomain is not a poset") rng (kCheckSemilattice tenv cod)
             return P.List(P.Prod(pTyDom,pTyCod))
         }
     | Capsule(tyContents, q, rng) ->
@@ -505,14 +505,18 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                 match domToset with
                 | Some(comp) -> Result comp
                 | None -> Error ["dictionary domain " + dom.ToString() + " is not a toset type",rng]
-            match codSemilat with
-            | Some({bot = bCod ; join = jCod ; tyDelta = deltaCod ; iso = isoCod }) ->
-                let! pCodDelta = kCheckProset tenv deltaCod
-                let resTy,_,_,_,_  = makeDictionarySemilat pDomTy pCodTy dom deltaCod pDomComp jCod pCodDelta isoCod
-                return KProper(resTy, None, None, noRange)
-            | None ->
-                let resTy = P.List (P.Prod(pDomTy,pCodTy))
-                return KProper(resTy, None, None, noRange)
+            let! res = 
+                match codSemilat with
+                | Some({bot = bCod ; join = jCod ; tyDelta = deltaCod ; iso = isoCod }) ->
+                    check {
+                        let! pCodDelta = kCheckProset tenv deltaCod
+                        let pResTy,pBot,pJoin,tyDelta,pIso  = makeDictionarySemilat pDomTy pCodTy dom deltaCod pDomComp jCod pCodDelta isoCod
+                        return KProper(pResTy, None, Some { bot = pBot ; join = pJoin ; tyDelta = tyDelta ; iso = pIso }, noRange)
+                    }
+                | None ->
+                    Error ["Type of dictionary codomain should be a semilattice type, but " + cod.ToString() + " is not one.", rng]
+                    failwith (kCod.ToString())
+            return res
         }
     | Capsule(tyContents, q, rng) ->
         check {
@@ -641,6 +645,7 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                 | false -> 
                     Error ["kind " + kArg.ToString() + " of type argument " + argTy.ToString() + " does not match expected kind " + opDom.ToString(), rng]
             // compute semantics
-            let! k = kSynth tenv (Ty.normalize(tenv.tyAliasEnv, ty))
+            let tyNorm = Ty.normalize(tenv.tyAliasEnv, ty)
+            let! k = kSynth tenv tyNorm
             return k
         }
