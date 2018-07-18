@@ -323,17 +323,17 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                     Result (lTy, rTy)
                 | _ ->
                     Error [errorMsg + ": case scrutinee should have sum type, but instead found" + scrutTy.ToString(), rng]
+            let! pTyL = kCheckProset ctxt.tenv lTy
+            let! pTyR = kCheckProset ctxt.tenv rTy
             let venvL = venv.Add(lName, lTy)
             let ctxtL = { ctxt with venv = venvL }
             let! lTy, lQ, plTerm = withError errorMsg rng (typeCheck ctxtL lElim)
-            let! pTyL = kCheckProset ctxt.tenv lTy
             let venvR = venv.Add(rName, rTy)
             let ctxtR = { ctxt with venv = venvR }
             let! rTy, rQ, prTerm = withError errorMsg rng (typeCheck ctxtR rElim)
-            let! pTyR = kCheckProset ctxt.tenv rTy
             do! withError errorMsg rng (Ty.IsSubtype ctxt.tenv.tyAliasEnv lTy targetTy)
             do! withError errorMsg rng (Ty.IsSubtype ctxt.tenv.tyAliasEnv rTy targetTy)
-            return targetTy, contr (contr scrutQ lQ) rQ, P.SumCase(pScrutTerm, P.Abs(lName, pTyL, plTerm), P.Abs(rName, pTyR, prTerm)) 
+            return targetTy, contr (contr (comp (lQ.[lName] ++ rQ.[rName]) scrutQ) (lQ.Remove(lName))) (rQ.Remove(rName)), P.SumCase(pScrutTerm, P.Abs(lName, pTyL, plTerm), P.Abs(rName, pTyR, prTerm)) 
         }
     | Inl(lty, rty, expr, rng) ->
         check {
@@ -436,6 +436,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let! pBindTy = kCheckProset ctxt.tenv bindTy
             let venv' = venv.Add(varId, bindTy)
             let! bodyTy, bodyQ, pBodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } bodyExpr)
+            let! pBodyTy = kCheckProset ctxt.tenv bodyTy
             do!
                 match Coeffect.LessThan bodyQ.[varId] CoeffectMonotone with
                 | true ->
@@ -445,8 +446,8 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let pBodyFun = P.Abs(varId, pBindTy, pBodyTerm)
             let resTerm = P.SumCase(
                             pPartialCompTerm, 
-                            P.Abs("!l", pBindTy, P.In1(pBindTy, P.Unit, P.App(pBodyFun, P.Var("!r")))),
-                            P.Abs("!r", P.Unit, P.In2(pBindTy, P.Unit, P.PrimUnitVal)))
+                            P.Abs("!l", pBindTy, P.In1(pBodyTy, P.Unit, P.App(pBodyFun, P.Var("!l")))),
+                            P.Abs("!r", P.Unit, P.In2(pBodyTy, P.Unit, P.PrimUnitVal)))
             return Partial(bodyTy, noRange), contr partialCompQ (bodyQ.Remove(varId)), resTerm
         }
     | MRet(expr,rng) ->

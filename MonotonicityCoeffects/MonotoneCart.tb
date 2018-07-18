@@ -55,9 +55,21 @@ and isComplete =
 		end
 	end
 
+and swap =
+
+    fun (action : Action)
+        case action to Action of 
+        inl x -> inr ItemId ItemId x
+        inr x -> inl ItemId ItemId x
+    end
+
 in
 	let co = | ((4,6), 1337) | 
-	and actions = { (4, (add 40)) -> true , (5, (remove 50)) -> true, (6, (add 20)) -> true : (ActionId*Action) |> Bool }
-	in (isComplete (co, actions))
+	and actions = { (4, (swap (add 40))) -> true , (5, (remove 50)) -> true, (6, (add 20)) -> true : (ActionId*Action) |> Bool }
+	and ic = (isComplete (co, actions))
+    in
+        let [ x ] <- ic in 
+            (monoIf !Bool !Nat x 3)
+        end
 	end
 end
