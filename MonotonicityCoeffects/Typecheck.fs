@@ -436,7 +436,13 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let! pBindTy = kCheckProset ctxt.tenv bindTy
             let venv' = venv.Add(varId, bindTy)
             let! bodyTy, bodyQ, pBodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } bodyExpr)
-            let! pBodyTy = kCheckProset ctxt.tenv bodyTy
+            let! contentsTy = 
+                match bodyTy with
+                | Partial(contentsTy, _) ->
+                    Result contentsTy
+                | _ ->
+                    Error [errorMsg + ": " + (getSource ctxt bodyExpr) + " expected to be a monotonically partial computation, but has type " + bodyTy.ToString() + " instead.", rng]
+            let! pContentsTy = kCheckProset ctxt.tenv contentsTy
             do!
                 match Coeffect.LessThan bodyQ.[varId] CoeffectMonotone with
                 | true ->
@@ -446,9 +452,9 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let pBodyFun = P.Abs(varId, pBindTy, pBodyTerm)
             let resTerm = P.SumCase(
                             pPartialCompTerm, 
-                            P.Abs("!l", pBindTy, P.In1(pBodyTy, P.Unit, P.App(pBodyFun, P.Var("!l")))),
-                            P.Abs("!r", P.Unit, P.In2(pBodyTy, P.Unit, P.PrimUnitVal)))
-            return Partial(bodyTy, noRange), contr partialCompQ (bodyQ.Remove(varId)), resTerm
+                            P.Abs("!l", pBindTy, P.App(pBodyFun, P.Var("!l"))),
+                            P.Abs("!r", P.Unit, P.In2(pContentsTy, P.Unit, P.PrimUnitVal)))
+            return bodyTy, contr partialCompQ (bodyQ.Remove(varId)), resTerm
         }
     | MRet(expr,rng) ->
         check {

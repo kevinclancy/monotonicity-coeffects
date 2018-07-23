@@ -355,7 +355,7 @@ and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term *
             
 and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty> =
     let tyVarEnv, tyBaseEnv, tyAliasEnv = tenv.tyVarEnv, tenv.tyBaseEnv, tenv.tyAliasEnv
-    let errorMsg = "Type " + ty.ToString() + " is not a proset"
+    let errorMsg = "Type " + ty.ToString() + " is not a poset"
     match ty with
     | TyId(name,rng) ->
         match tyVarEnv.TryFind(name) with
@@ -382,7 +382,7 @@ and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty> =
     | Dictionary(dom, cod, rng) ->
         check {
             let! pTyDom,_ = withError (errorMsg + ": domain is not a toset") rng (kCheckToset tenv dom)
-            let! pTyCod,_,_,_,_ = withError (errorMsg + ": codomain is not a poset") rng (kCheckSemilattice tenv cod)
+            let! pTyCod,_,_,_,_ = withError (errorMsg + ": codomain is not a semilattice") rng (kCheckSemilattice tenv cod)
             return P.List(P.Prod(pTyDom,pTyCod))
         }
     | Capsule(tyContents, q, rng) ->
@@ -521,7 +521,7 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
     | Capsule(tyContents, q, rng) ->
         check {
             // should we generate an error here if q is *?
-            let! pTyContents = withError (errorMsg + ": capsule content not a proset") rng (kCheckProset tenv tyContents)
+            let! pTyContents = withError (errorMsg + ": capsule content not a poset") rng (kCheckProset tenv tyContents)
             return KProper(pTyContents, None, None, noRange)
         }
     | Prod(tyL, tyR, rng) ->
