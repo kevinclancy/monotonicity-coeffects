@@ -67,11 +67,8 @@ in
 	let co = | ((4,6), 1337) | 
 	and actions = { (4, (swap (add 40))) -> true , (5, (remove 50)) -> true, (6, (add 20)) -> true : (ActionId*Action) |> Bool }
 	and ic = (isComplete (co, actions))
-    in
-        let [ x ] <- ic  
-        and [ y ] <- ic
-        in
-            [ (monoIf !Bool !Nat x (plus 3 4)) ]
-        end
-	end
+    and [ x ] <- ic  
+    and [ y ] <- ic
+    in [ (monoIf !Bool !Nat x (plus 3 4)) ]
+    end
 end

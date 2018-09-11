@@ -10,7 +10,7 @@ let equal =
 		  (bNot (y < x)))
 	end
 
-and monoIf = 
+and whenTrue = 
 
   fun (src : SEMILATTICE) (dest : SEMILATTICE) (cond : src) (res : dest)
       let extract to dest with k v acc = { unit -> cond : Unit |> src } in
@@ -18,12 +18,15 @@ and monoIf =
       end
   end
 
-and multiplicity =
+and bagMultiplicity =
 
-  fun (ElemTy : TOSET) (b : Bag ElemTy) (eLookup : ElemTy)
-    let extract to Nat with e m acc = b
-    and isEqual = (equal !ElemTy e eLookup) 
-    in (max (monoIf !Bool !Nat isEqual m) acc)
+  fun (ElemTy : TOSET) (eLookup : ElemTy) 
+    hom (b : Bag ElemTy . (? ElemTy) * Nat)
+      let cap ? e = fst b
+      and m = snd b
+      and isEqual = (equal !ElemTy e eLookup) 
+      in (whenTrue !Bool !Nat isEqual m)
+      end
     end
   end
 
@@ -33,14 +36,51 @@ and bagIntersect =
         hom (y : Bag ElemTy . (?ElemTy) * Nat)
           let cap ? elem = fst y
           and m = snd y
-          in { elem -> (min (multiplicity !ElemTy x elem) m) : (Bag ElemTy) }
+          in { elem -> (min (bagMultiplicity !ElemTy elem x) m) : (Bag ElemTy) }
           end
 	    end
 	end
 
+and bagProject =
+    // project is kind of pointless in the setting of LambdaMC:
+    // it's just a wrapper around hom
+    fun (SrcElemTy : TOSET) (DestTy : SEMILATTICE) (fn : ((?SrcElemTy)*Nat) ->+ DestTy)
+      hom (b : Bag SrcElemTy . (?SrcElemTy)*Nat)
+        (fn b)
+      end
+    end
+
+and bagAdd =
+
+    fun (ElemTy : TOSET) (other : Bag ElemTy)
+      hom (self : Bag ElemTy . (?ElemTy)*Nat)
+        let cap ? e = fst self
+        and n = snd self 
+        in { e -> (plus (bagMultiplicity !ElemTy e other) n) : Bag ElemTy }
+        end
+      end
+    end
+
+and bagContains =
+
+    fun (ElemTy : TOSET) (eCheck : ElemTy)
+      hom (self : Bag ElemTy . (?ElemTy)*Nat)
+        let cap ? e = fst self 
+        in (equal !ElemTy e eCheck)
+        end
+      end
+    end
+
+and bagSize =
+    fun (ElemTy : TOSET) (self : Bag ElemTy) 
+        let extract to Nat with k v acc = self in
+            (plus acc v)
+        end
+    end
+
 in 
-    (bagIntersect 
+    (bagSize
         !Nat 
-        { 1 -> 1, 2 -> 3 : (Bag Nat) }
-        { 1 -> 2, 2 -> 1 : (Bag Nat) })
+        { 1 -> 1, 2 -> 3 : (Bag Nat) })
+        // { 1 -> 2, 2 -> 1 : (Bag Nat) })
 end

@@ -40,6 +40,17 @@ and neighbors =
       end
     end
   end 
+
+and hello =
+
+   fun (x : (-(-Nat))) 
+    let cap - y = x
+    and cap - z = y
+    in z
+    end
+   end
+
+
 and graph =
  
   {
