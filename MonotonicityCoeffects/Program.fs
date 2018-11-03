@@ -16,6 +16,71 @@ module P = PCF
 
 let goneWrong = "This program has 'gone wrong'. Oops."
 
+// natural numbers for upper bound (right injection is infinity, i.e. no upper bound)
+let pNatUpperTy = P.Sum(P.Prim("Nat"), P.Unit)
+
+let joinNatUpper (t : P.Term) =
+    match t with
+    | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(m)) ->
+        let joinNatUpper' (s : P.Term) =
+            match s with
+            | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(n)) ->
+                P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(Math.Min(m,n)))
+            | P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
+                P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(m))
+            | _ ->
+                failwith goneWrong
+        P.Abs("n", pNatUpperTy, P.App(PrimFun("joinNatUpper'", pNatUpperTy, pNatUpperTy, joinNatUpper'), P.Var("n")))
+    | P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
+        let joinNatUpper' (s : P.Term) =
+            match s with
+            | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(n)) ->
+                P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(n))
+            | P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
+                P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal)
+            | _ ->
+                failwith goneWrong
+        P.Abs("n", pNatUpperTy, P.App(PrimFun("joinNatUpper'", pNatUpperTy, pNatUpperTy, joinNatUpper'), P.Var("n")))
+    | _ ->
+        failwith goneWrong
+
+let primJoinNatUpper = P.PrimFun("joinNat", pNatUpperTy, P.Fun(pNatUpperTy, pNatUpperTy), joinNatUpper)
+
+let lessNatUpper (t : P.Term) =
+    match t with
+    | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(m)) ->
+        let lessNatUpper' (s : P.Term) =
+            match s with
+            | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(n)) ->
+                if m < n then
+                    pcfTrue
+                else
+                    pcfFalse
+            | P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
+                pcfTrue
+            | _ ->
+                failwith "This program has 'gone wrong'. Oops."
+        P.Abs("n", pNatUpperTy, P.App(PrimFun("lessNatUpper'", pNatUpperTy, pBoolTy, lessNatUpper'), P.Var("n")))
+    | P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
+        let lessNatUpper' (s : P.Term) =
+            pcfFalse
+        P.Abs("n", pNatUpperTy, P.App(PrimFun("lessNatUpper'", pNatUpperTy, pBoolTy, lessNatUpper'), P.Var("n")))
+    | _ ->
+        failwith "this program has 'gone wrong'. oops."    
+
+let primLessNatUpper = P.PrimFun("lessNat", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.pBoolTy), lessNat)
+
+let isoNatUpper (t : P.Term) : P.Term =
+    match t with
+    | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(m)) ->
+        P.Cons(P.PrimNatVal(m), P.EmptyList(P.Prim("Nat")))
+    | P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
+        P.EmptyList(P.TyVar("Nat"))
+    | _ ->
+        failwith "this program has 'gone wrong'. oops."
+
+let primIsoNatUpper = P.PrimFun("isoNatUpper", pNatUpperTy, P.List(P.Prim("Nat")), isoNatUpper)
+
 let joinNat (t : P.Term) =
     match t with
     | P.PrimNatVal(m) ->
@@ -35,7 +100,7 @@ let primJoinNat = P.PrimFun("joinNat", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.Pri
 let lessNat (t : P.Term) =
     match t with
     | P.PrimNatVal(m) ->
-        let joinNat' (s : P.Term) =
+        let lessNat' (s : P.Term) =
             match s with
             | P.PrimNatVal(n) ->
                 if m < n then
@@ -45,7 +110,7 @@ let lessNat (t : P.Term) =
             | _ ->
                 failwith "This program has 'gone wrong'. Oops."
 
-        P.Abs("n", P.Prim("Nat"), P.App(PrimFun("lessNat'", P.Prim("Nat"), P.Prim("Nat"), joinNat'), P.Var("n")))
+        P.Abs("n", P.Prim("Nat"), P.App(PrimFun("lessNat'", P.Prim("Nat"), P.Prim("Bool"), lessNat'), P.Var("n")))
     | _ ->
         failwith "this program has 'gone wrong'. oops."    
 
@@ -131,6 +196,12 @@ let baseTyMap =
                     P.Prim("Nat"), 
                     Some(primLessNat), 
                     Some { bot = PrimNatVal(0) ; join = primJoinNat ; tyDelta = TyId("Nat",noRange) ; iso = primIsoNat }, 
+                    noRange));
+
+         ("NatU", KProper(
+                    pNatUpperTy,
+                    Some(primLessNatUpper),
+                    Some { bot = P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ; join = primJoinNatUpper ; tyDelta = TyId("Nat", noRange) ; iso = primIsoNatUpper },
                     noRange));
 
          ("Unit", KProper(
