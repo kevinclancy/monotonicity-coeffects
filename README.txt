@@ -204,10 +204,6 @@ to a result. If the result is undefined, the eliminator produces an undefined re
 Otherwise, e₁ produces a result v of type σ; the value of the eliminator
 is then the value of [v/x]e₂.
 
-The binding form for monotone partiality cannot be mixed with other forms 
-of partiality due to its status as a monadic binder. However, it can be
-chained using "and notation", as seen in MonotoneCart.tb.
-
 The eliminators for sums and products are standard. For products,
 we use ``fst e`` to project the first component of e's value and
 ``snd e`` to project the second component of e's value.
