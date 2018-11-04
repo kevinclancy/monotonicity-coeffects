@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <None Include="BloomAPI.tb" />
+    <None Include="WeightedGraph.tb" />
     <None Include="Lexer.fsl" />
     <None Include="Datafun.tb" />
     <None Include="lvars.tb" />

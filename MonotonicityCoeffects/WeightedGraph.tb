@@ -1,8 +1,10 @@
-types
+﻿types
   Set = typefun (x : TOSET) x |> Bool end;
   NodeId = Nat;
-  NodeSet = Set NodeId;
-  Graph = NodeId |> NodeSet;
+  // maps each node id to the shortest known path length to that node
+  SPMap = NodeId |> NatU;
+  EdgeSet = NodeId |> NatU;
+  Graph = NodeId |> EdgeSet;
 in
 
 let equal =
@@ -29,14 +31,16 @@ and lookup =
     end 
   end
 
-and neighbors =
+and relax =
   
   fun (g : Graph) 
-    hom (x : NodeSet . (?Nat)*Unit)
+    hom (x : SPMap . (?Nat)*NatU)
       // when we extract the natural number n from a ?-capsule, we can use n 
       // arbitrarily, while still using the capsule (fst x) monotonically
       let cap ? n = fst x 
-      in (lookup !NodeId !NodeSet g n)
+      and dist = snd x
+      and extract to NodeId |> NatU with k v acc = (lookup !NodeId !EdgeSet g n)
+      in { k -> (plusU dist v) : NodeId |> NatU }
       end
     end
   end 
@@ -44,13 +48,14 @@ and neighbors =
 and graph =
  
   {
-    1 -> { 2 -> true, 3 -> true : NodeSet },
-    2 -> { 4 -> true, 5 -> true : NodeSet },
-    6 -> { 7 -> true, 3 -> true : NodeSet },
-    8 -> { 9 -> true, 10 -> true : NodeSet }
+    1 -> { 2 -> u1 : EdgeSet },
+    2 -> { 1 -> u1, 3 -> u1, 4 -> u5 : EdgeSet },
+    3 -> { 2 -> u1, 4 -> u1 : EdgeSet },
+    4 -> { 2 -> u5, 3 -> u1, 5 -> u1 : EdgeSet },
+    5 -> { 4 -> u1 : EdgeSet }
     : Graph
   }
 
 in
- (neighbors graph { 1 -> true, 8 -> true : NodeSet })
+ (relax graph { 1 -> u0 : SPMap })
 end

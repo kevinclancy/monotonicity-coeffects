@@ -384,6 +384,8 @@ let hasKind (k : Kind) (p : ProperKind) =
 
 type Expr =
   | Int of int * Range
+  // "upper bound" int
+  | UInt of int * Range
   | Bool of bool * Range
   | Forall of tyVar : string * kind : ProperKind * body : Expr * Range
   | ForallApp of forall : Expr * arg : Ty * Range
@@ -422,6 +424,7 @@ type Expr =
   member this.GetRange() : Range =
     match this with
     | Int(_,rng)
+    | UInt(_,rng)
     | Bool(_,rng)
     | Forall(_,_,_,rng)
     | ForallApp(_,_,rng)
@@ -457,6 +460,8 @@ type Expr =
     match this with
     | Int(i,_) ->
         i.ToString()
+    | UInt(i,_) ->
+        "u" + i.ToString()
     | Bool(b,_) ->
         b.ToString().ToLower()
     | Forall(tyVar,kind,body,_) ->
@@ -535,6 +540,10 @@ let rec toMC (tyAliases : Map<string, Ty>) (t : PCF.Term) (ty : Ty) (tyName : Op
             "false"
     | TyId(name,_), PCF.PrimNatVal(n) when name = "Nat" ->
         n.ToString()
+    | TyId(name,_), PCF.In1(PCF.Prim("Nat"), PCF.Unit, PCF.PrimNatVal(n)) when name = "NatU" ->
+        "u" + n.ToString()
+    | TyId(name,_), PCF.In2(_, _, _) when name = "NatU" ->
+        "inf"
     | TyId(name,_), _ ->
         match tyAliases.TryFind(name) with
         | Some(ty') ->

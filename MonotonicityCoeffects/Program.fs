@@ -63,23 +63,28 @@ let lessNatUpper (t : P.Term) =
         P.Abs("n", pNatUpperTy, P.App(PrimFun("lessNatUpper'", pNatUpperTy, pBoolTy, lessNatUpper'), P.Var("n")))
     | P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
         let lessNatUpper' (s : P.Term) =
-            pcfFalse
+            match s with
+            | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(_))
+            | P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
+                pcfFalse
+            | _ ->
+                failwith "This program has 'gone wrong'. Oops."
         P.Abs("n", pNatUpperTy, P.App(PrimFun("lessNatUpper'", pNatUpperTy, pBoolTy, lessNatUpper'), P.Var("n")))
     | _ ->
         failwith "this program has 'gone wrong'. oops."    
 
-let primLessNatUpper = P.PrimFun("lessNat", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.pBoolTy), lessNat)
+let primLessNatUpper = P.PrimFun("lessNat", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.pBoolTy), lessNatUpper)
 
 let isoNatUpper (t : P.Term) : P.Term =
     match t with
     | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(m)) ->
-        P.Cons(P.PrimNatVal(m), P.EmptyList(P.Prim("Nat")))
+        P.Cons(P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(m)), P.EmptyList(P.Prim("NatU")))
     | P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
         P.EmptyList(P.TyVar("Nat"))
     | _ ->
         failwith "this program has 'gone wrong'. oops."
 
-let primIsoNatUpper = P.PrimFun("isoNatUpper", pNatUpperTy, P.List(P.Prim("Nat")), isoNatUpper)
+let primIsoNatUpper = P.PrimFun("isoNatUpper", pNatUpperTy, P.List(pNatUpperTy), isoNatUpper)
 
 let joinNat (t : P.Term) =
     match t with
@@ -201,7 +206,7 @@ let baseTyMap =
          ("NatU", KProper(
                     pNatUpperTy,
                     Some(primLessNatUpper),
-                    Some { bot = P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ; join = primJoinNatUpper ; tyDelta = TyId("Nat", noRange) ; iso = primIsoNatUpper },
+                    Some { bot = P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ; join = primJoinNatUpper ; tyDelta = TyId("NatU", noRange) ; iso = primIsoNatUpper },
                     noRange));
 
          ("Unit", KProper(
@@ -230,6 +235,41 @@ let plus (t1 : P.Term) : P.Term =
         failwith goneWrong
 
 let primPlus = P.PrimFun("plus", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.Prim("Nat")), plus)
+
+let plusU (t1 : P.Term) : P.Term =
+    match t1 with
+    | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(n)) ->
+        let plusU' (t2 : P.Term) =
+            match t2 with
+            | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(m)) ->
+                P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(n + m))
+            | P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
+                P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal)
+            | _ ->
+                failwith goneWrong
+        P.PrimFun("plusU'", pNatUpperTy, pNatUpperTy, plusU')
+    | P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
+        let plusU' (t2 : P.Term) =
+            match t2 with
+            | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(_)) 
+            | P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
+                P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal)
+            | _ ->
+                failwith goneWrong
+        P.PrimFun("plusU'", pNatUpperTy, pNatUpperTy, plusU')
+    | _ ->
+        failwith goneWrong
+
+let primPlusU = P.PrimFun("plusU", pNatUpperTy, P.Fun(pNatUpperTy, pNatUpperTy), plusU)
+
+let flip (t : P.Term) : P.Term =
+    match t with
+    | P.PrimNatVal(n) ->
+        P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(n))
+    | _ ->
+        failwith goneWrong
+
+let primFlip = P.PrimFun("flip", P.Prim("Nat"), pNatUpperTy, flip)
 
 let mult (t1 : P.Term) : P.Term =
     match t1 with
@@ -374,11 +414,13 @@ let baseVEnv =
                    primMaxNat))
          ("min", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Nat", noRange), noRange), noRange), 
                    primMinNat))
+         ("flip", (FunTy(TyId("Nat",noRange), CoeffectAntitone, TyId("NatU", noRange), noRange), primFlip))
+         ("plusU", (FunTy(TyId("NatU",noRange), CoeffectMonotone, FunTy(TyId("NatU",noRange), CoeffectMonotone, TyId("NatU", noRange), noRange), noRange), 
+                   primPlusU))
          //("eq", (FunTy(TyId("Nat",noRange), CoeffectAny, FunTy(TyId("Nat",noRange), CoeffectAny, TyId("Bool", noRange), noRange), noRange))
         // TODO: we need primitive unit values in syntax
          ("unit", (TyId("Unit", noRange),
                   P.PrimUnitVal))] 
-        
     )
 
 let tenv = { tyVarEnv = Map.empty ; tyBaseEnv = baseTyMap; tyAliasEnv = Map.empty }

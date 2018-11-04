@@ -12,6 +12,7 @@ open Ast
 
 %token <string> ID CONST
 %token <System.Int32> INT
+%token <System.Int32> UINT
 %token <System.Double> FLOAT
 %token TRUE FALSE FUN COLON EQUAL 
 %token BOT JOIN EXTRACT CONS IGET ISET 
@@ -68,7 +69,8 @@ CoeffectAscriptionList : CoeffectAscriptionList COMMA Scalar ID { ($3,$4) :: $1 
 					   | Scalar ID { [($1,$2)] }
 
 
-Expr: INT                        { Int($1, parseState.ResultRange) }
+Expr: INT                       { Int($1, parseState.ResultRange) }
+    | UINT                      { UInt($1, parseState.ResultRange) }
 	| TRUE                      { Bool(true, parseState.ResultRange) }
 	| FALSE                     { Bool(false, parseState.ResultRange) }
 	| FUN ParList END { $2 }

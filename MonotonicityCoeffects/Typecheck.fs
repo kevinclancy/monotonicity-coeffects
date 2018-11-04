@@ -3,10 +3,7 @@
 open PCF
 open Ast
 open Kindcheck
-open System
 open CheckComputation
-open System.Security.Cryptography
-open System.Reflection.Metadata
 
 module P = PCF
 
@@ -53,6 +50,11 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             Result (TyId("Nat", noRange), Map.map (fun k v -> Coeffect.Ign) venv, P.PrimNatVal(n))
         else
             Error ["Negative integer constants not allowed", rng]
+    | UInt(n , rng) ->
+        if n >= 0 then
+            Result (TyId("NatU", noRange), Map.map (fun k v -> Coeffect.Ign) venv, P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(n)))
+        else
+            Error ["Negative integer constants not allowed", rng]        
     | Bool(b,rng) ->
         Result (TyId("Bool", noRange), Map.map (fun k v -> Coeffect.Ign) venv, makePcfBool b)
     | Forall(tyVarId, pk, body, rng) ->

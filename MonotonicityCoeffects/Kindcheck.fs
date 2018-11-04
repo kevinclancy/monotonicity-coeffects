@@ -89,7 +89,6 @@ let makeProdSemilat (pTyL : P.Ty) (pTyR : P.Ty) (bL : P.Term) (bR : P.Term)
                     P.Pair(P.App(P.App(jL, P.Proj1(V("!x"))),P.Proj1(V("!y"))),
                             P.App(P.App(jR,P.Proj2(V("!x"))), P.Proj2(V("!y"))))))    
     let pDeltaTy = P.Sum(pDeltaL, pDeltaR)
-    let pIsoResTy = P.List(pDeltaTy)
     let deltasL = P.App(pIsoL, P.Proj1(P.Var("!p")))
     let deltasR = P.App(pIsoR, P.Proj2(P.Var("!p")))
     let pIso = 
@@ -194,9 +193,9 @@ let rec kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Check<SemPoset * SemTos
                     Error ["type " + name + " not found", rng]                    
     | FunTy(_,_,_,rng) ->
         Error [errorMsg + ": no function type is considered a toset", rng]
-    | Dictionary(dom, cod, rng) ->
+    | Dictionary(_, _, rng) ->
         Error [errorMsg + ": no dictionary type is considered a toset", rng]
-    | Capsule(ty,q, rng) ->
+    | Capsule(_,_, rng) ->
         Error [errorMsg + ": no capsule type is considered a toset", rng]
     | Prod(tyL, tyR, rng) ->
         check {
@@ -214,11 +213,11 @@ let rec kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Check<SemPoset * SemTos
         }
     | IVar(_, rng) ->
         Error [(errorMsg + ": no ivar type is considered a toset", rng)]
-    | TyOp(varId, kind, body, rng) ->
+    | TyOp(_, _, _, rng) ->
         Error [(errorMsg + ": no type operator is totally ordered", rng)]
-    | ForallTy(varId, kind, body, rng) ->
+    | ForallTy(_, _, _, rng) ->
         Error [(errorMsg + ": forall types do not denote tosets",rng)]
-    | Partial(ty,rng) ->
+    | Partial(_, rng) ->
         Error [(errorMsg + ": no type in the partiality monad is totally ordered",rng)]
     | TyApp(tyOp, tyArg, rng) ->
         check {
@@ -321,7 +320,7 @@ and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term *
         }    
     | TyOp(_,_,_,rng) ->
         Error [(errorMsg + ": type operators do not denote semilattices", rng)]
-    | ForallTy(varId, kind, body, rng) ->
+    | ForallTy(_, _, _, rng) ->
         Error [(errorMsg + ": forall types do not denote semilattices",rng)]
     | Partial(elemTy,rng) ->
         check {
@@ -373,7 +372,7 @@ and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty> =
                     withError errorMsg rng (kCheckProset tenv ty)
                 | None ->
                     Error ["type " + name + " not found", rng]  
-    | FunTy(dom,q,cod,rng) ->
+    | FunTy(dom,_,cod,rng) ->
         check {
             let! pTyDom = withError (errorMsg + ": domain is not a poset") rng (kCheckProset tenv dom)
             let! pTyCod = withError (errorMsg + ": codomain is not a poset") rng (kCheckProset tenv cod)
@@ -500,14 +499,14 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
             let! kDom = withError (errorMsg + ": domain is not a well-kinded") rng (kSynth tenv dom)
             let! kCod = withError (errorMsg + ": codomain is not well-kinded") rng (kSynth tenv cod)
             let! pDomTy, domToset, domSemilat = getProper "domain type" kDom
-            let! pCodTy, codToset, codSemilat = getProper "codomain type" kCod
+            let! pCodTy, _, codSemilat = getProper "codomain type" kCod
             let! pDomComp = 
                 match domToset with
                 | Some(comp) -> Result comp
                 | None -> Error ["dictionary domain " + dom.ToString() + " is not a toset type",rng]
             let! res = 
                 match codSemilat with
-                | Some({bot = bCod ; join = jCod ; tyDelta = deltaCod ; iso = isoCod }) ->
+                | Some({bot = _ ; join = jCod ; tyDelta = deltaCod ; iso = isoCod }) ->
                     check {
                         let! pCodDelta = kCheckProset tenv deltaCod
                         let pResTy,pBot,pJoin,tyDelta,pIso  = makeDictionarySemilat pDomTy pCodTy dom deltaCod pDomComp jCod pCodDelta isoCod
@@ -555,8 +554,8 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
         check {
             let! kL = withError (errorMsg + ": left type is not well-kinded") rng (kSynth tenv tyL)
             let! kR = withError (errorMsg + ": right type is not well-kinded") rng (kSynth tenv tyR)
-            let! pTyL, optTosetL, optSemilatL = getProper "left type" kL
-            let! pTyR, optTosetR, optSemilatR = getProper "right type" kR
+            let! pTyL, optTosetL, _ = getProper "left type" kL
+            let! pTyR, optTosetR, _ = getProper "right type" kR
             let pTy = P.Sum(pTyL, pTyR)
             let semToset = 
                 match optTosetL, optTosetR with
@@ -578,14 +577,6 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
         // of forall types until they are applied. However, we will still need to build some stub semantics 
         // to leverage other code.
         check {
-            //let kDom = 
-            //    match kind with
-            //    | Poset ->
-            //        KProper(P.Unit, None, None, noRange)
-            //    | Semilattice ->
-            //        KProper(P.Unit, None, Some({ bot = P.PrimUnitVal ; join = P.PrimUnitVal }), noRange)
-            //    | Toset ->
-            //        KProper(P.Unit, Some(P.PrimUnitVal), None, noRange)
             let! kCod = withError (errorMsg + ": body not well-formed") rng (kSynth {tenv with tyVarEnv = tyVarEnv.Add(varId,kind)} body)
             return KOperator(kind,kCod,noRange)
         }
@@ -613,7 +604,7 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
     | Partial(tyContents, rng) ->
         check {
             let! k = withError errorMsg rng (kSynth tenv tyContents)
-            let! resTy, optToset, optSemi = getProper "underlying type" k
+            let! resTy, _, optSemi = getProper "underlying type" k
             let! semi = 
                 match optSemi with
                 | Some {bot = bot'; join = join' ; tyDelta = delta' ; iso = iso'} ->
@@ -637,7 +628,6 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                 | KOperator(dom, cod, rng) ->
                     Result (dom, cod)
             let! kArg = withError errorMsg rng (kSynth tenv argTy)
-            let! pArgTy, optArgToset, optArgSemi = getProper (argTy.ToString()) kArg
             let! _ = 
                 match hasKind kArg opDom with
                 | true -> 
