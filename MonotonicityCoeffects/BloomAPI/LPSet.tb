@@ -1,0 +1,76 @@
+﻿types
+  // a set of non-negative integers
+  LPSet = Nat |> Bool;
+in
+
+let equal =
+
+	fun (A : TOSET) (x : A) (y : A)
+		(bAnd 
+		  (bNot (x < y)) 
+		  (bNot (y < x)))
+	end
+
+and whenTrue = 
+
+  fun (dest : SEMILATTICE) (cond : Bool) (res : dest)
+      let extract to dest with k v acc = { unit -> cond : Unit |> Bool } in
+		res
+      end
+  end
+
+and lookup = 
+
+    fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K)
+        let extract to V with k2 v acc = d
+        in (whenTrue !V (equal !K k k2) v)
+        end 
+    end
+
+
+and intersect =
+
+    fun (x : LPSet) 
+        hom (y : LPSet . (?Nat) * Unit)
+            let cap ? n = fst y
+            in {n -> (lookup !Nat !Bool x n) : LPSet}
+            end
+        end
+    end
+
+// isn't this more of a select?
+and project =
+    
+    fun (p : Nat ->+ Bool)
+        hom (d : LPSet . (?Nat) * Unit)
+            let cap ? n = fst d
+            in { n -> (p n ) : LPSet }
+            end
+        end
+    end
+
+// note that product would not make sense for lpset (unless we're talking about the divisibility semilattice)
+
+and sum =
+
+    fun (x : LPSet) @(+ x)
+        let extract to Nat with n v acc = x
+        in (plus n acc)
+        end
+    end
+
+and size = 
+
+    fun (x : LPSet) @(+ x)
+        let extract to Nat with n v acc = x
+        in (plus 1 acc)
+        end
+    end
+
+in 
+    (size { 1 -> true , 2 -> true , 3 -> true : LPSet })
+    //(project (fun (n : Nat) (geq n 2) end) { 1 -> true , 0 -> true , 10 -> true : LPSet })
+
+    //(intersect { 1 -> true , 2 -> true : LPSet } { 1 -> true , 3 -> true : LPSet})
+end
+

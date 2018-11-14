@@ -577,7 +577,8 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
         // of forall types until they are applied. However, we will still need to build some stub semantics 
         // to leverage other code.
         check {
-            let! kCod = withError (errorMsg + ": body not well-formed") rng (kSynth {tenv with tyVarEnv = tyVarEnv.Add(varId,kind)} body)
+            let tyVarEnv' = if kind = Semilattice then tenv.tyVarEnv.Add(varId, Semilattice).Add(varId + "Delta", Poset) else tenv.tyVarEnv.Add(varId, kind)
+            let! kCod = withError (errorMsg + ": body not well-formed") rng (kSynth {tenv with tyVarEnv = tyVarEnv'} body)
             return KOperator(kind,kCod,noRange)
         }
     | ForallTy(varId, kind, body, rng) ->

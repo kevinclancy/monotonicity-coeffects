@@ -1,0 +1,20 @@
+﻿types
+  LMax = Nat;
+in
+
+// Conway et al. use negative infinity as the bottom of their LMax lattice; to us, 0 seems more natural.
+
+// amost all of BloomL's lmax methods are not homomorphic by our definition, since we require preservation
+// of bottom.
+
+let LMaxGreaterThan =
+
+    fun (n : Nat) (m : Nat)
+        ((hom (n : Nat . Nat)
+            (gt n m)
+        end) n)
+    end
+
+in
+    (LMaxGreaterThan 0 1)
+end

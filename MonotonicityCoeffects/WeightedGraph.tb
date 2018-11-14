@@ -35,8 +35,6 @@ and relax =
   
   fun (g : Graph) 
     hom (x : SPMap . (?Nat)*NatU)
-      // when we extract the natural number n from a ?-capsule, we can use n 
-      // arbitrarily, while still using the capsule (fst x) monotonically
       let cap ? n = fst x 
       and dist = snd x
       and extract to NodeId |> NatU with k v acc = (lookup !NodeId !EdgeSet g n)

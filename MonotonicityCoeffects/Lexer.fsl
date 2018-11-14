@@ -90,5 +90,5 @@ rule token = parse
 | eof            { EOF }
 
 and comment = parse
-| newline { token lexbuf }
+| newline { newline lexbuf ; token lexbuf }
 | _ { comment lexbuf }

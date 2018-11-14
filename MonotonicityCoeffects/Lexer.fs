@@ -699,7 +699,7 @@ and _fslex_comment  _fslex_state lexbuf =
   match _fslex_tables.Interpret(_fslex_state,lexbuf) with
   | 0 -> ( 
 # 93 "Lexer.fsl"
-                           token lexbuf 
+                           newline lexbuf ; token lexbuf 
 # 703 "Lexer.fs"
           )
   | 1 -> ( 

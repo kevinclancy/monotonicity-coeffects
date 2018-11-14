@@ -19,7 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="BloomAPI.tb" />
+    <None Include="BloomAPI\LMap.tb" />
+    <None Include="BloomAPI\LMax.tb" />
+    <None Include="BloomAPI\LSet.tb" />
+    <None Include="BloomAPI\LPSet.tb" />
+    <None Include="BloomAPI\Bag.tb" />
     <None Include="WeightedGraph.tb" />
     <None Include="Lexer.fsl" />
     <None Include="Datafun.tb" />

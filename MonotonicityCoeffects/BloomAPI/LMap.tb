@@ -1,0 +1,42 @@
+﻿types
+  LSet = typefun (x : TOSET) x |> Bool end;
+  LMap = typefun (x : TOSET) (y : SEMILATTICE) x |> y end;
+in
+
+let equal =
+
+	fun (A : TOSET) (x : A) (y : A)
+		(bAnd 
+		  (bNot (x < y)) 
+		  (bNot (y < x)))
+	end
+
+and whenTrue = 
+
+  fun (dest : SEMILATTICE) (cond : Bool) (res : dest)
+      let extract to dest with k v acc = { unit -> cond : Unit |> Bool } in
+		res
+      end
+  end
+
+and lookup = 
+
+    fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K)
+        let extract to V with k2 v acc = d
+        in (whenTrue !V (equal !K k k2) v)
+        end 
+    end
+
+and keySet =
+
+    fun (K : TOSET) (V : SEMILATTICE) 
+        hom (kv : LMap K V . (?K) * VDelta)
+            let cap ? k = fst kv
+            in { k -> true : LSet K }
+            end
+        end
+    end
+
+in
+  (keySet !Nat !Nat {1 -> 2 , 43 -> 7 : LMap Nat Nat})
+end

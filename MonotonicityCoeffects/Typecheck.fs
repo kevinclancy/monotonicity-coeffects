@@ -135,7 +135,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             match qs.TryFind(var) with // None case unreachable
             | Some(q) ->
                 let ty' = FunTy(semilatTy, q, targetTy, noRange)
-                let qs' = qs.Remove(var)
+                let qs' = if ctxt.venv.ContainsKey(var) then Map.add var CoeffectRobust qs else Map.remove var qs                
                 let pMapDelta = P.Abs(var, pComputedDeltaTy, term)
                 let pDeltas = P.App(pIso, P.Var("!x"))
                 let pMappedDeltas = forEach pComputedDeltaTy pTargetTy pMapDelta pDeltas
@@ -152,7 +152,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             match qs.TryFind(var) with // None case unreachable
             | Some(q) ->
                 let ty' = FunTy(varTy, q, ty, noRange)
-                let qs' = qs.Remove(var)
+                let qs' = if ctxt.venv.ContainsKey(var) then Map.add var CoeffectRobust qs else Map.remove var qs
                 let term' = P.Abs(var, pTyVar, term)
                 return ty', qs', term'
         }

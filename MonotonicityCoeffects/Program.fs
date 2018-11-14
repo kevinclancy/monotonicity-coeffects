@@ -1,13 +1,8 @@
 ﻿open System
-open Lexer
 open Microsoft.FSharp.Text.Lexing
-open Microsoft.FSharp.Text.Parsing
-open Microsoft.FSharp.Text.Parsing.ParseHelpers
 open System.IO
-open Parser
 open Typecheck
 open Ast
-open System
 open Kindcheck
 open CheckComputation
 open PCF
@@ -73,7 +68,7 @@ let lessNatUpper (t : P.Term) =
     | _ ->
         failwith "this program has 'gone wrong'. oops."    
 
-let primLessNatUpper = P.PrimFun("lessNat", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.pBoolTy), lessNatUpper)
+let primLessNatUpper = P.PrimFun("lessNatUpper", pNatUpperTy, P.Fun(pNatUpperTy, P.pBoolTy), lessNatUpper)
 
 let isoNatUpper (t : P.Term) : P.Term =
     match t with
@@ -360,6 +355,22 @@ let geq (t1 : P.Term) : P.Term =
 
 let primGeq = P.PrimFun("geq", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.pBoolTy), geq)
 
+let gt (t1 : P.Term) : P.Term =
+    match t1 with
+    | P.PrimNatVal(n) ->
+        let gt' (t2 : P.Term) =
+            match t2 with
+            | P.PrimNatVal(m) ->
+                makePcfBool (n > m)
+            | _ ->
+                failwith goneWrong
+        P.PrimFun("gt'", P.Prim("Nat"), P.pBoolTy, gt')
+    | _ ->
+        failwith goneWrong
+
+let primGt = P.PrimFun("gt", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.pBoolTy), gt)
+
+
 let maxNat (t : P.Term) =
     match t with
     | P.PrimNatVal(m) ->
@@ -410,6 +421,8 @@ let baseVEnv =
                   primLeq))
          ("geq", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectAntitone, TyId("Bool", noRange), noRange), noRange),
                   primGeq))
+         ("gt", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectAntitone, TyId("Bool", noRange), noRange), noRange),
+                  primGt))
          ("max", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Nat", noRange), noRange), noRange), 
                    primMaxNat))
          ("min", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Nat", noRange), noRange), noRange), 
