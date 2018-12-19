@@ -514,7 +514,6 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                     }
                 | None ->
                     Error ["Type of dictionary codomain should be a semilattice type, but " + cod.ToString() + " is not one.", rng]
-                    failwith (kCod.ToString())
             return res
         }
     | Capsule(tyContents, q, rng) ->

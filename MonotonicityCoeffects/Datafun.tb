@@ -1,6 +1,7 @@
 ﻿types
   Bag = typefun (x : TOSET) x |> Nat end;
   MultiRel = typefun (src : TOSET) (dst : TOSET) (src * dst) |> Nat end;
+  Bool = Unit + Unit;
 in
 
 let equal =
@@ -31,18 +32,21 @@ and map =
 
 and lookup = 
 
-  fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K)
+  fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K) @(+ d)
     let extract to V with k2 v acc = d
-    in (monoIf !Bool !V (equal !K k k2) v)
-    end 
+    in 
+        case (equal !K k k2) to V of
+        inl x -> v
+        inr x -> (bot V)
+    end
   end
 
 and filter =
 
-  fun (elemTy : TOSET) (f : elemTy ->? Nat ->+ Bool) (bag : Bag elemTy)
+  fun (elemTy : TOSET) (f : elemTy ->? Nat ->+ Prop) (bag : Bag elemTy)
       :: (Bag elemTy) @(+ f, + bag)
 		let extract to (Bag elemTy) with e m acc = bag
-		and m2 = (monoIf !Bool !Nat (f e m) m)
+		and m2 = (monoIf !Prop !Nat (f e m) m)
 		in (cons e m2 acc)  
 		end	
   end
@@ -56,7 +60,10 @@ and comp =
 		and b1 = snd ab
 		and b2 = fst bc
 		and c = snd bc
-		and m3 = (monoIf !Bool !Nat (equal !B b1 b2) (mult m1 m2))
+		and m3 = 
+            case (equal !B b1 b2) to Nat of 
+            inl x -> (mult m1 m2)
+            inr x -> (bot Nat)
 		in { (a,c) -> (plus (lookup !(A * C) !Nat acc1 (a,c)) m3)  : MultiRel A C }
 		end
 	end

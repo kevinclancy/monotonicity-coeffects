@@ -1,0 +1,108 @@
+﻿types
+  Bag = typefun (x : TOSET) x |> Nat end;
+in
+
+let equal =
+
+	fun (A : TOSET) (x : A) (y : A)
+		(bAnd 
+		  (bNot (x < y)) 
+		  (bNot (y < x)))
+	end
+
+and whenTrue = 
+
+  fun (dest : SEMILATTICE) (cond : Prop) (res : dest)
+      let extract to dest with k v acc = { unit -> cond : Unit |> Prop } in
+		res
+      end
+  end
+
+
+and lookup = 
+
+  fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K) @(+ d)
+    let extract to V with k2 v acc = d
+    in 
+        case (equal !K k k2) to V of
+        inl x -> v
+        inr x -> (bot V)
+    end
+  end
+
+///////////////////////////////////////////////////////////// lbag //////////////////////////////////////////////////////////////
+
+and bagMultiplicity =
+
+  fun (ElemTy : TOSET) (eLookup : ElemTy)
+    hom (b : Bag ElemTy . (? ElemTy) * Nat)
+      let cap ? e = fst b
+      and m = snd b
+      in  
+        case (equal !ElemTy e eLookup) to Nat of 
+        inl x -> m
+        inr x -> 0
+      end
+    end
+  end
+
+and bagIntersect =
+
+    fun (ElemTy : TOSET) (x : Bag ElemTy) 
+        hom (y : Bag ElemTy . (?ElemTy) * Nat)
+          let cap ? elem = fst y
+          and m = snd y
+          in { elem -> (min (bagMultiplicity !ElemTy elem x) m) : (Bag ElemTy) }
+          end
+	    end
+	end
+
+and bagProject =
+    // project is kind of pointless in the setting of LambdaMC:
+    // it's just a wrapper around hom
+    fun (SrcElemTy : TOSET) (DestTy : SEMILATTICE) (fn : ((?SrcElemTy)*Nat) ->+ DestTy)
+      hom (b : Bag SrcElemTy . (?SrcElemTy)*Nat)
+        (fn b)
+      end
+    end
+
+and bagAdd =
+
+    fun (ElemTy : TOSET) (other : Bag ElemTy)
+      hom (self : Bag ElemTy . (?ElemTy)*Nat)
+        let cap ? e = fst self
+        and n = snd self 
+        in { e -> (plus (bagMultiplicity !ElemTy e other) n) : Bag ElemTy }
+        end
+      end
+    end
+
+and bagContains =
+
+    fun (ElemTy : TOSET) (eCheck : ElemTy)
+      hom (self : Bag ElemTy . (?ElemTy)*Nat)
+        let cap ? e = fst self 
+        in 
+          case (equal !ElemTy e eCheck) to Prop of
+          inl x -> known
+          inr x -> unknown
+        end
+      end
+    end
+
+and bagSize =
+    fun (ElemTy : TOSET) (self : Bag ElemTy) @(+ self)
+        let extract to Nat with k v acc = self in
+            (plus acc v)
+        end
+    end
+
+///////////////////////////////////////////////////////////// lpset //////////////////////////////////////////////////////////////
+
+in 
+    //(intersect !Nat { 1 -> 1 , 2 -> 3 })
+    (bagSize
+        !Nat 
+        { 1 -> 1, 2 -> 3 : (Bag Nat) })
+        // { 1 -> 2, 2 -> 1 : (Bag Nat) })
+end

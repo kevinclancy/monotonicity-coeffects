@@ -1,5 +1,5 @@
 ﻿types
-  Set = typefun (x : TOSET) x |> Bool end;
+  Set = typefun (x : TOSET) x |> Prop end;
   ActionId = Nat;
   ItemId = Nat;
   NetworkAddr = Nat;
@@ -34,7 +34,7 @@ and setCount =
 
 and isComplete =
 
-	fun (cart : Cart) :: [Bool] @(+ cart)
+	fun (cart : Cart) :: [Prop] @(+ cart)
 		let iCheckout = fst cart 
 		and actions = snd cart
 		and | checkout | = iCheckout
@@ -46,7 +46,7 @@ and isComplete =
 			let extract to (Set ActionId) with idAction isMember seen = actions
 			and id = fst idAction 
 			and act = snd idAction in
-				(monoIf !Bool !(Set ActionId) (bAnd (leq lo id) (leq id hi)) { id -> true : (Set ActionId) })
+				(monoIf !Prop !(Set ActionId) (pAnd (leq lo id) (leq id hi)) { id -> known : (Set ActionId) })
 			end
 		in
 			let numIds = (setCount !ActionId setIds) in
@@ -65,10 +65,10 @@ and swap =
 
 in
 	let co = | ((4,6), 1337) | 
-	and actions = { (4, (swap (add 40))) -> true , (5, (remove 50)) -> true, (6, (add 20)) -> true : (ActionId*Action) |> Bool }
+	and actions = { (4, (swap (add 40))) -> known , (5, (remove 50)) -> known, (6, (add 20)) -> known : (ActionId*Action) |> Prop }
 	and ic = (isComplete (co, actions))
     and [ x ] <- ic  
     and [ y ] <- ic
-    in [ (monoIf !Bool !Nat x (plus 3 4)) ]
+    in [ (monoIf !Prop !Nat x (plus 3 4)) ]
     end
 end

@@ -2,6 +2,7 @@
 
 open CheckComputation
 open System.Reflection.Metadata.Ecma335
+open System.Runtime.Serialization
 
 type Ty =
     | Unit
@@ -90,10 +91,16 @@ type Term =
             "(case " + scrut.ToString() + " with | κ1 -> " + leftCase.ToString() + " | κ2 -> " + rightCase.ToString() + ")"
         | LetRec(funName, parName, domTy, codTy, body) ->
             "(letrec " + funName + " " + parName + " = " + body.ToString() + ")"
-         
+
+type Prop =
+   | Unknown 
+   | Known
+
 let pcfTrue = In1(Unit,Unit,PrimUnitVal)
 let pcfFalse = In2(Unit,Unit,PrimUnitVal)
 let makePcfBool b = if b then In1(Unit,Unit,PrimUnitVal) else In2(Unit,Unit,PrimUnitVal)
+let makePcfProp p = match p with Known -> In1(Unit, Unit, PrimUnitVal) | Unknown -> In2(Unit,Unit,PrimUnitVal)
+let pPropTy = Sum(Unit,Unit)
 let pBoolTy = Sum(Unit,Unit)
 let pUnitTy = Unit
 
@@ -103,6 +110,15 @@ let (|PCFBool|) (t : Term) =
         true
     | In2(Unit,Unit,PrimUnitVal) ->
         false
+    | _ ->
+        failwith "This program has 'gone wrong'. Oops."
+
+let (|PCFProp|) (t : Term) = 
+    match t with
+    | In1(Unit, Unit, PrimUnitVal) ->
+        Known
+    | In2(Unit, Unit, PrimUnitVal) ->
+        Unknown
     | _ ->
         failwith "This program has 'gone wrong'. Oops."
 

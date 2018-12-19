@@ -1,10 +1,11 @@
 ﻿types
-  Set = typefun (x : TOSET) x |> Bool end;
+  Set = typefun (x : TOSET) x |> Prop end;
   NodeId = Nat;
   // maps each node id to the shortest known path length to that node
   SPMap = NodeId |> NatU;
   EdgeSet = NodeId |> NatU;
   Graph = NodeId |> EdgeSet;
+  Bool = Unit + Unit;
 in
 
 let equal =
@@ -25,11 +26,15 @@ and monoIf =
 
 and lookup = 
 
-  fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K)
+  fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K) @(+ d)
     let extract to V with k2 v acc = d
-    in (monoIf !Bool !V (equal !K k k2) v)
-    end 
+    in 
+        case (equal !K k k2) to V of
+        inl x -> v
+        inr x -> (bot V)
+    end
   end
+
 
 and relax =
   

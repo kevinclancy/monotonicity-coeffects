@@ -64,8 +64,8 @@ type token =
   | CONS
   | IGET
   | ISET
-  | TRUE
-  | FALSE
+  | KNOWN
+  | UNKNOWN
   | FUN
   | COLON
   | EQUAL
@@ -129,8 +129,8 @@ type tokenId =
     | TOKEN_CONS
     | TOKEN_IGET
     | TOKEN_ISET
-    | TOKEN_TRUE
-    | TOKEN_FALSE
+    | TOKEN_KNOWN
+    | TOKEN_UNKNOWN
     | TOKEN_FUN
     | TOKEN_COLON
     | TOKEN_EQUAL
@@ -218,8 +218,8 @@ let tagOfToken (t:token) =
   | CONS  -> 50 
   | IGET  -> 51 
   | ISET  -> 52 
-  | TRUE  -> 53 
-  | FALSE  -> 54 
+  | KNOWN  -> 53 
+  | UNKNOWN  -> 54 
   | FUN  -> 55 
   | COLON  -> 56 
   | EQUAL  -> 57 
@@ -285,8 +285,8 @@ let tokenTagToTokenId (tokenIdx:int) =
   | 50 -> TOKEN_CONS 
   | 51 -> TOKEN_IGET 
   | 52 -> TOKEN_ISET 
-  | 53 -> TOKEN_TRUE 
-  | 54 -> TOKEN_FALSE 
+  | 53 -> TOKEN_KNOWN 
+  | 54 -> TOKEN_UNKNOWN 
   | 55 -> TOKEN_FUN 
   | 56 -> TOKEN_COLON 
   | 57 -> TOKEN_EQUAL 
@@ -442,8 +442,8 @@ let token_to_string (t:token) =
   | CONS  -> "CONS" 
   | IGET  -> "IGET" 
   | ISET  -> "ISET" 
-  | TRUE  -> "TRUE" 
-  | FALSE  -> "FALSE" 
+  | KNOWN  -> "KNOWN" 
+  | UNKNOWN  -> "UNKNOWN" 
   | FUN  -> "FUN" 
   | COLON  -> "COLON" 
   | EQUAL  -> "EQUAL" 
@@ -509,8 +509,8 @@ let _fsyacc_dataOfToken (t:token) =
   | CONS  -> (null : System.Object) 
   | IGET  -> (null : System.Object) 
   | ISET  -> (null : System.Object) 
-  | TRUE  -> (null : System.Object) 
-  | FALSE  -> (null : System.Object) 
+  | KNOWN  -> (null : System.Object) 
+  | UNKNOWN  -> (null : System.Object) 
   | FUN  -> (null : System.Object) 
   | COLON  -> (null : System.Object) 
   | EQUAL  -> (null : System.Object) 
@@ -982,7 +982,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 74 "Parser.fsy"
-                                                    Bool(true, parseState.ResultRange) 
+                                                    Prop(PCF.Known, parseState.ResultRange) 
                    )
 # 74 "Parser.fsy"
                  : 'Expr));
@@ -992,7 +992,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 75 "Parser.fsy"
-                                                    Bool(false, parseState.ResultRange) 
+                                                    Prop(PCF.Unknown, parseState.ResultRange) 
                    )
 # 75 "Parser.fsy"
                  : 'Expr));

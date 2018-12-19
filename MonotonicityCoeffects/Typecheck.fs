@@ -55,8 +55,8 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             Result (TyId("NatU", noRange), Map.map (fun k v -> Coeffect.Ign) venv, P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(n)))
         else
             Error ["Negative integer constants not allowed", rng]        
-    | Bool(b,rng) ->
-        Result (TyId("Bool", noRange), Map.map (fun k v -> Coeffect.Ign) venv, makePcfBool b)
+    | Prop(b,rng) ->
+        Result (TyId("Prop", noRange), Map.map (fun k v -> Coeffect.Ign) venv, makePcfProp b)
     | Forall(tyVarId, pk, body, rng) ->
         check {
             let tyVarEnv' = 
@@ -207,7 +207,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let! ty2, Q2, pTerm2 = withError errorMsg rng (typeCheck ctxt e2)
             do! withError (errorMsg + ": left operand type does not match that of right operand type") rng (Ty.IsEquiv ctxt.tenv.tyAliasEnv ty2 ty1)
             let term = P.App(P.App(pLessThan, pTerm1), pTerm2)
-            return TyId("Bool", noRange), contr (comp CoeffectAntitone Q1) Q2, term
+            return Sum(TyId("Unit", noRange), TyId("Unit", noRange), noRange), (comp CoeffectAny (contr Q1 Q2)), term
         }
     | Extract(targetTy, key, value, acc, dict, body, rng) ->
         check {
@@ -335,7 +335,9 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let! rTy, rQ, prTerm = withError errorMsg rng (typeCheck ctxtR rElim)
             do! withError errorMsg rng (Ty.IsSubtype ctxt.tenv.tyAliasEnv lTy targetTy)
             do! withError errorMsg rng (Ty.IsSubtype ctxt.tenv.tyAliasEnv rTy targetTy)
-            return targetTy, contr (contr (comp (lQ.[lName] ++ rQ.[rName]) scrutQ) (lQ.Remove(lName))) (rQ.Remove(rName)), P.SumCase(pScrutTerm, P.Abs(lName, pTyL, plTerm), P.Abs(rName, pTyR, prTerm)) 
+            let lQ' = if venv.ContainsKey lName then lQ.Add(lName, CoeffectRobust) else lQ.Remove(lName)
+            let rQ' = if venv.ContainsKey rName then rQ.Add(rName, CoeffectRobust) else rQ.Remove(rName)
+            return targetTy, contr (contr (comp (lQ.[lName] ++ rQ.[rName]) scrutQ) lQ') rQ', P.SumCase(pScrutTerm, P.Abs(lName, pTyL, plTerm), P.Abs(rName, pTyR, prTerm)) 
         }
     | Inl(lty, rty, expr, rng) ->
         check {

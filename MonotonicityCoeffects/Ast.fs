@@ -386,7 +386,7 @@ type Expr =
   | Int of int * Range
   // "upper bound" int
   | UInt of int * Range
-  | Bool of bool * Range
+  | Prop of PCF.Prop * Range
   | Forall of tyVar : string * kind : ProperKind * body : Expr * Range
   | ForallApp of forall : Expr * arg : Ty * Range
   | Hom of var : string * semilatTy : Ty * deltaTy : Ty * body : Expr * Range
@@ -425,7 +425,7 @@ type Expr =
     match this with
     | Int(_,rng)
     | UInt(_,rng)
-    | Bool(_,rng)
+    | Prop(_,rng)
     | Forall(_,_,_,rng)
     | ForallApp(_,_,rng)
     | Hom(_,_,_,_,rng)
@@ -462,7 +462,7 @@ type Expr =
         i.ToString()
     | UInt(i,_) ->
         "u" + i.ToString()
-    | Bool(b,_) ->
+    | Prop(b,_) ->
         b.ToString().ToLower()
     | Forall(tyVar,kind,body,_) ->
         "(" + "forall " + tyVar.ToString() + " : " + kind.ToString() + " . " + body.ToString() + ")" 
@@ -532,12 +532,12 @@ let rec toMC (tyAliases : Map<string, Ty>) (t : PCF.Term) (ty : Ty) (tyName : Op
     match ty, t with
     | TyId(name,_), PCF.PrimUnitVal when name = "Unit" ->
         "()"
-    | TyId(name,_), _ when name = "Bool" ->
+    | TyId(name,_), _ when name = "Prop" ->
         match t with
-        | PCF.PCFBool(true) ->
-            "true"
-        | PCF.PCFBool(false) ->
-            "false"
+        | PCF.PCFProp(PCF.Known) ->
+            "known"
+        | PCF.PCFProp(PCF.Unknown) ->
+            "unknown"
     | TyId(name,_), PCF.PrimNatVal(n) when name = "Nat" ->
         n.ToString()
     | TyId(name,_), PCF.In1(PCF.Prim("Nat"), PCF.Unit, PCF.PrimNatVal(n)) when name = "NatU" ->

@@ -1,5 +1,5 @@
 types
-  Set = typefun (x : TOSET) x |> Bool end;
+  Set = typefun (x : TOSET) x |> Prop end;
   NodeId = Nat;
   NodeSet = Set NodeId;
   Graph = NodeId |> NodeSet;
@@ -23,11 +23,15 @@ and monoIf =
 
 and lookup = 
 
-  fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K)
+  fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K) @(+ d)
     let extract to V with k2 v acc = d
-    in (monoIf !Bool !V (equal !K k k2) v)
-    end 
+    in 
+        case (equal !K k k2) to V of
+        inl x -> v
+        inr x -> (bot V)
+    end
   end
+
 
 and neighbors =
   
@@ -44,13 +48,13 @@ and neighbors =
 and graph =
  
   {
-    1 -> { 2 -> true, 3 -> true : NodeSet },
-    2 -> { 4 -> true, 5 -> true : NodeSet },
-    6 -> { 7 -> true, 3 -> true : NodeSet },
-    8 -> { 9 -> true, 10 -> true : NodeSet }
+    1 -> { 2 -> known, 3 -> known : NodeSet },
+    2 -> { 4 -> known, 5 -> known : NodeSet },
+    6 -> { 7 -> known, 3 -> known : NodeSet },
+    8 -> { 9 -> known, 10 -> known : NodeSet }
     : Graph
   }
 
 in
- (neighbors graph { 1 -> true, 8 -> true : NodeSet })
+ (neighbors graph { 1 -> known , 8 -> known : NodeSet })
 end

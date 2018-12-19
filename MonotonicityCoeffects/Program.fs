@@ -127,16 +127,25 @@ let isoNat (t : P.Term) : P.Term =
 
 let primIsoNat = P.PrimFun("isoNat", P.Prim("Nat"), P.List(P.Prim("Nat")), isoNat)
 
-let joinBool (t : P.Term)  =
+let joinProp (t : P.Term)  =
     match t with
     | PCFBool(a) ->
         let joinBool' (s : P.Term) =
             match s with
             | PCFBool(b) ->
                 makePcfBool (a || b)
-        P.Abs("b", P.pBoolTy, P.App(P.PrimFun("joinBool'", P.pBoolTy, P.pBoolTy, joinBool'), P.Var("b")))
+        P.Abs("b", P.pPropTy, P.App(P.PrimFun("joinProp'", P.pPropTy, P.pPropTy, joinBool'), P.Var("b")))
 
-let primJoinBool = P.PrimFun("joinBool", P.pBoolTy, P.Fun(P.pBoolTy, P.pBoolTy), joinBool)
+let primJoinProp = P.PrimFun("joinProp", P.pPropTy, P.Fun(P.pPropTy, P.pPropTy), joinProp)
+
+let lessProp (t : P.Term)  =
+    match t with
+    | PCFProp(a) -> //unknown
+        let lessBool' (s : P.Term) : P.Term =
+            match s with
+            | PCFProp(b) ->
+                makePcfBool (a = Unknown && b = Known)
+        P.Abs("b", P.pPropTy, P.App(P.PrimFun("lessProp'", P.pPropTy, P.pPropTy, lessBool'), P.Var("b")))
 
 let lessBool (t : P.Term)  =
     match t with
@@ -147,9 +156,10 @@ let lessBool (t : P.Term)  =
                 makePcfBool (a = false && b = true)
         P.Abs("b", P.pBoolTy, P.App(P.PrimFun("lessBool'", P.pBoolTy, P.pBoolTy, lessBool'), P.Var("b")))
 
-let primLessBool = P.PrimFun("lessBool", P.pBoolTy, P.Fun(P.pBoolTy, P.pBoolTy), lessBool)
 
-let isoBool (t : P.Term) : P.Term =
+let primLessProp = P.PrimFun("lessProp", P.pPropTy, P.Fun(P.pPropTy, P.pPropTy), lessProp)
+
+let isoProp (t : P.Term) : P.Term =
     match t with
     | PCFBool(a) when a = true ->
         P.Cons(P.PrimUnitVal, P.EmptyList(P.Unit))
@@ -158,7 +168,10 @@ let isoBool (t : P.Term) : P.Term =
     | _ ->
         failwith goneWrong
 
-let primIsoBool = P.PrimFun("isoBool", pBoolTy, P.List(P.Unit), isoBool)
+let primIsoProp = P.PrimFun("isoProp", pPropTy, P.List(P.Unit), isoProp)
+
+let primLessBool = P.PrimFun("lessBool", P.pBoolTy, P.Fun(P.pBoolTy, P.pBoolTy), lessProp)
+
 
 let joinUnit (t : P.Term)  =
     match t with
@@ -173,7 +186,7 @@ let joinUnit (t : P.Term)  =
     | _ ->
         failwith "this program has 'gone wrong'. oops."
 
-let primJoinUnit = P.PrimFun("joinUnit", P.pUnitTy, P.Fun(P.pUnitTy, P.pUnitTy), joinBool)
+let primJoinUnit = P.PrimFun("joinUnit", P.pUnitTy, P.Fun(P.pUnitTy, P.pUnitTy), joinUnit)
 
 let lessUnit (t : P.Term)  =
     match t with
@@ -210,12 +223,19 @@ let baseTyMap =
                     None,
                     noRange));
 
-         ("Bool", KProper(
+         ("Prop", KProper(
+                    P.Sum(P.Unit, P.Unit),
+                    Some(primLessProp),
+                    Some{bot = In1(P.Unit, P.Unit, P.PrimUnitVal); join = primJoinProp ; tyDelta = TyId("Unit", noRange) ; iso = primIsoProp},
+                    noRange)) ;
+
+        ("Bool", KProper(
                     P.Sum(P.Unit, P.Unit),
                     Some(primLessBool),
-                    Some{bot = makePcfBool false ; join = primJoinBool ; tyDelta = TyId("Unit", noRange) ; iso = primIsoBool},
+                    None,
                     noRange))])
- 
+
+
 let plus (t1 : P.Term) : P.Term =
     match t1 with
     | P.PrimNatVal(n) ->
@@ -403,6 +423,8 @@ let minNat (t : P.Term) =
 
 let primMinNat = P.PrimFun("minNat", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.Prim("Nat")), minNat)
 
+let BoolTy = Ast.Sum(Ast.TyId("Unit",noRange), Ast.TyId("Unit", noRange), noRange)
+
 let baseVEnv =
     Map<string, Ast.Ty * P.Term>(
         [("plus", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Nat", noRange), noRange), noRange), 
@@ -411,17 +433,23 @@ let baseVEnv =
                    primMult))
          ("minus",(FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectAntitone, TyId("Nat", noRange), noRange), noRange),
                    primMinus))
-         ("bAnd", (FunTy(TyId("Bool",noRange), CoeffectMonotone, FunTy(TyId("Bool",noRange), CoeffectMonotone, TyId("Bool", noRange), noRange), noRange),
+         ("bAnd", (FunTy(BoolTy, CoeffectRobust, FunTy(BoolTy, CoeffectRobust, BoolTy, noRange), noRange),
                    primAnd))
-         ("bOr", (FunTy(TyId("Bool",noRange), CoeffectMonotone, FunTy(TyId("Bool",noRange), CoeffectMonotone, TyId("Bool", noRange), noRange), noRange),
+         ("bOr", (FunTy(BoolTy, CoeffectRobust, FunTy(BoolTy, CoeffectRobust, BoolTy, noRange), noRange),
                   primOr))
-         ("bNot", (FunTy(TyId("Bool",noRange), CoeffectAntitone, TyId("Bool",noRange), noRange),
+         ("bNot", (FunTy(BoolTy, CoeffectRobust, BoolTy, noRange),
                    primNot))
-         ("leq", (FunTy(TyId("Nat",noRange), CoeffectAntitone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Bool", noRange), noRange), noRange),
+         ("pAnd", (FunTy(TyId("Prop",noRange), CoeffectMonotone, FunTy(TyId("Prop",noRange), CoeffectMonotone, TyId("Prop", noRange), noRange), noRange),
+                   primAnd))
+         ("pOr", (FunTy(TyId("Prop",noRange), CoeffectMonotone, FunTy(TyId("Prop",noRange), CoeffectMonotone, TyId("Prop", noRange), noRange), noRange),
+                  primOr))
+         ("pNot", (FunTy(TyId("Prop",noRange), CoeffectAntitone, TyId("Prop",noRange), noRange),
+                   primNot))
+         ("leq", (FunTy(TyId("Nat",noRange), CoeffectAntitone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Prop", noRange), noRange), noRange),
                   primLeq))
-         ("geq", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectAntitone, TyId("Bool", noRange), noRange), noRange),
+         ("geq", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectAntitone, TyId("Prop", noRange), noRange), noRange),
                   primGeq))
-         ("gt", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectAntitone, TyId("Bool", noRange), noRange), noRange),
+         ("gt", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectAntitone, TyId("Prop", noRange), noRange), noRange),
                   primGt))
          ("max", (FunTy(TyId("Nat",noRange), CoeffectMonotone, FunTy(TyId("Nat",noRange), CoeffectMonotone, TyId("Nat", noRange), noRange), noRange), 
                    primMaxNat))

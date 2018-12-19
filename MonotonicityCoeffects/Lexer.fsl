@@ -24,8 +24,8 @@ let newline = ('\n' | '\r' '\n')
 rule token = parse
 | newline        { newline lexbuf; token lexbuf }
 | whitespace     { token lexbuf }
-| "true"         { TRUE }
-| "false"        { FALSE }
+| "known"         { KNOWN }
+| "unknown"       { UNKNOWN }
 | "fun"          { FUN }
 | "hom"          { HOM }
 | "with"         { WITH }
