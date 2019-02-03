@@ -1,9 +1,11 @@
 ﻿types
   Set = typefun (x : TOSET) x |> Prop end;
   NodeId = Nat;
-  // maps each node id to the shortest known path length to that node
-  SPMap = NodeId |> NatU;
+  // maps each node id to the shortest known path length to that node, lexicographically paired with 
+  // parent index
+  SPMap = NodeId |> (NatU ^ Nat);
   EdgeSet = NodeId |> NatU;
+  //EdgeSetPrime = NodeId |> (NatU ^ Nat);
   Graph = NodeId |> EdgeSet;
   Bool = Unit + Unit;
 in
@@ -12,7 +14,7 @@ let equal =
 
 	fun (A : TOSET) (x : A) (y : A)
 		(bAnd 
-		  (bNot (x < y)) 
+		  (bNot (x < y))
 		  (bNot (y < x)))
 	end
 
@@ -39,11 +41,12 @@ and lookup =
 and relax =
   
   fun (g : Graph) 
-    hom (x : SPMap . (?Nat)*NatU)
+    hom (x : SPMap . (?Nat)*(NatU ^ Nat))
       let cap ? n = fst x 
-      and dist = snd x
-      and extract to NodeId |> NatU with k v acc = (lookup !NodeId !EdgeSet g n)
-      in { k -> (plusU dist v) : NodeId |> NatU }
+      and dist = lfst (snd x)
+      and parent = lsnd (snd x)
+      and extract to NodeId |> (NatU ^ Nat) with k v acc = (lookup !NodeId !EdgeSet g n)
+      in { k -> << (plusU dist v) , n >> : NodeId |> (NatU ^ Nat) }
       end
     end
   end 
@@ -60,5 +63,5 @@ and graph =
   }
 
 in
- (relax graph { 1 -> u0 : SPMap })
+ (relax graph { 1 -> << u0 , 1 >> : SPMap })
 end

@@ -43,7 +43,7 @@ let foundHole : Ref< Option<Context * Range> > = ref None
 let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Term> =
     let tenv,venv = ctxt.tenv, ctxt.venv
     let tyVarEnv, tyBaseEnv = tenv.tyVarEnv, tenv.tyBaseEnv
-    let errorMsg = "Expression\n\n" + (getSource ctxt expr) + "\n\nnot well-typed"
+    let errorMsg = "Expression not well-typed:\n\n" + (getSource ctxt expr) + "\n\n"
     match expr with
     | Int(n, rng) ->
         if n >= 0 then
@@ -146,7 +146,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
     | Abs(var, varTy, body, rng) ->
         check {
             let! kVar = withError ("type annotation " + varTy.ToString() + " is not well-kinded") rng (kSynth ctxt.tenv varTy)
-            let! pTyVar,_,_ = getProper "argument type" kVar 
+            let! pTyVar,_,_,_ = getProper "argument type" kVar 
             let venv' = Map.add var varTy venv
             let! ty,qs,term = withError (errorMsg + ": body not well-typed") rng (typeCheck { ctxt with venv = venv' } body)
             match qs.TryFind(var) with // None case unreachable
@@ -310,12 +310,40 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                     Error [errorMsg + ": expected product type, but got " + pairTy.ToString(),rng]
             return resTy, pairQ, P.Proj2(pPairTerm)
         }
+    | LFst(ePair,rng) ->
+        check {
+            let! pairTy, pairQ, pPairTerm = withError errorMsg rng (typeCheck ctxt ePair)
+            let! resTy = 
+                match Ty.normalize(ctxt.tenv.tyAliasEnv, pairTy) with
+                | LexProd(tyL,_,_) ->
+                    Result tyL
+                | _ ->
+                    Error [errorMsg + ": expected lexicographical product type, but got " + pairTy.ToString(),rng]
+            return resTy, pairQ, P.Proj1(pPairTerm)
+        }
+    | LSnd(ePair,rng) ->
+        check {
+            let! pairTy, pairQ, pPairTerm = withError errorMsg rng (typeCheck ctxt ePair)
+            let! resTy = 
+                match Ty.normalize(ctxt.tenv.tyAliasEnv, pairTy) with
+                | LexProd(_,tyR,_) ->
+                    Result tyR
+                | _ ->
+                    Error [errorMsg + ": expected lexicographical product type, but got " + pairTy.ToString(),rng]
+            return resTy, comp CoeffectAny pairQ, P.Proj2(pPairTerm)
+        }
     | Pair(eFst, eSnd, rng) ->
         check {
             let! fstTy, fstQ, pFstTerm = withError errorMsg rng (typeCheck ctxt eFst)
             let! sndTy, sndQ, pSndTerm = withError errorMsg rng (typeCheck ctxt eSnd)
             return Prod(fstTy, sndTy, noRange), contr fstQ sndQ, P.Pair(pFstTerm, pSndTerm)
         }
+    | LexPair(eFst, eSnd, rng) ->
+        check {
+            let! fstTy, fstQ, pFstTerm = withError errorMsg rng (typeCheck ctxt eFst)
+            let! sndTy, sndQ, pSndTerm = withError errorMsg rng (typeCheck ctxt eSnd)
+            return LexProd(fstTy, sndTy, noRange), contr fstQ sndQ, P.Pair(pFstTerm, pSndTerm)
+        }        
     | Case(eScrut, targetTy, lName, lElim, rName, rElim,rng) ->
         check {
             let! scrutTy, scrutQ, pScrutTerm = withError errorMsg rng (typeCheck ctxt eScrut)

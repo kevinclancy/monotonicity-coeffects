@@ -14,15 +14,15 @@ open Ast
 %token <System.Int32> INT
 %token <System.Int32> UINT
 %token <System.Double> FLOAT
-%token TRUE FALSE FUN COLON EQUAL 
-%token BOT JOIN EXTRACT CONS IGET ISET 
-%token AT DOT PLUS MINUS QUESTION ASTERISK LPAREN RPAREN IN LET END EOF FST SND COMMA OF CASE 
+%token KNOWN UNKNOWN FUN COLON EQUAL 
+%token BOT JOIN EXTRACT CONS IGET ISET LFST LSND
+%token AT DOT PLUS MINUS QUESTION ASTERISK CARET LPAREN RPAREN LLBRACK RRBRACK IN LET END EOF FST SND COMMA OF CASE 
 %token INL INR TO CAP UNCAP PIPE TYPES SEMICOLON LBRACK RBRACK BANG
 %token HASH DICT TOSET POSET SEMILATTICE FORALL BIGFORALL IMPLIES ARROW
 %token LSQUAREBRACKET RSQUAREBRACKET LARROW AND TYPEFUN COLONS WITH LESSTHAN HOM
 %token HOLE
 
-%right ARROW DICT PLUS ASTERISK IMPLIES
+%right ARROW DICT PLUS ASTERISK CARET IMPLIES
 
 %%
 
@@ -71,8 +71,8 @@ CoeffectAscriptionList : CoeffectAscriptionList COMMA Scalar ID { ($3,$4) :: $1 
 
 Expr: INT                       { Int($1, parseState.ResultRange) }
     | UINT                      { UInt($1, parseState.ResultRange) }
-	| TRUE                      { Bool(true, parseState.ResultRange) }
-	| FALSE                     { Bool(false, parseState.ResultRange) }
+	| KNOWN                     { Prop(PCF.Known, parseState.ResultRange) }
+	| UNKNOWN                   { Prop(PCF.Unknown, parseState.ResultRange) }
 	| FUN ParList END { $2 }
 	| HOM LPAREN ID COLON TyList DOT TyList RPAREN Expr END { Hom($3, $5, $7, $9, parseState.ResultRange) }
 	| LET LetList { $2 }
@@ -84,8 +84,11 @@ Expr: INT                       { Int($1, parseState.ResultRange) }
 	| CONS Expr Expr Expr { Cons($2, $3, $4, parseState.ResultRange) }
 	| FST Expr { Fst($2, parseState.ResultRange) }
 	| SND Expr { Snd($2, parseState.ResultRange) }
+    | LFST Expr { LFst($2, parseState.ResultRange) }
+    | LSND Expr { LSnd($2, parseState.ResultRange) }
 	| LPAREN ExprList RPAREN { $2 }
 	| LPAREN Expr COMMA Expr RPAREN { Pair($2, $4, parseState.ResultRange) }
+    | LLBRACK Expr COMMA Expr RRBRACK { LexPair($2, $4, parseState.ResultRange) }
 	| CASE Expr TO TyList OF INL ID ARROW Expr INR ID ARROW Expr 
 	  { Case($2, $4, $7, $9, $11, $13, parseState.ResultRange) }
 	| INL Ty Ty Expr { Inl($2,$3,$4, parseState.ResultRange) }
@@ -111,6 +114,7 @@ Ty: LPAREN Scalar TyList RPAREN { Capsule($3, $2, parseState.ResultRange) }
   | Ty DICT Ty { Dictionary($1,$3, parseState.ResultRange) }
   | Ty PLUS Ty { Sum($1,$3, parseState.ResultRange) }
   | Ty ASTERISK Ty { Prod($1,$3, parseState.ResultRange) }
+  | Ty CARET Ty { LexProd($1, $3, parseState.ResultRange) }
   | PIPE TyList PIPE { IVar($2, parseState.ResultRange) }
   | LSQUAREBRACKET TyList RSQUAREBRACKET { Partial($2, parseState.ResultRange) }
   | ID { TyId($1, parseState.ResultRange) }

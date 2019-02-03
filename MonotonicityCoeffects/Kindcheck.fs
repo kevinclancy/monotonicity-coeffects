@@ -26,10 +26,10 @@ type TypeEnvironment = {
     tyAliasEnv : Map<string, Ty> 
 }
 
-let getProper (role : string) (k : Kind) : Check< SemPoset * Option<SemToset> * Option<SemSemilat> > =
+let getProper (role : string) (k : Kind) : Check< SemPoset * Option<SemToset> * Option<SemSemilat> * bool> =
     match k with
-    | KProper(semPoset, semToset, semSemilat,_) ->
-        Result(semPoset, semToset, semSemilat)
+    | KProper(semPoset, semToset, semSemilat, isChain, _) ->
+        Result(semPoset, semToset, semSemilat, isChain)
     | _ ->
         Error [role + " does not have a proper kind", noRange]
 
@@ -91,12 +91,50 @@ let makeProdSemilat (pTyL : P.Ty) (pTyR : P.Ty) (bL : P.Term) (bR : P.Term)
     let pDeltaTy = P.Sum(pDeltaL, pDeltaR)
     let deltasL = P.App(pIsoL, P.Proj1(P.Var("!p")))
     let deltasR = P.App(pIsoR, P.Proj2(P.Var("!p")))
+
     let pIso = 
         P.Abs("!p", resTy, 
             (append pDeltaTy 
                 (forEach pDeltaL pDeltaTy (P.Abs("!d", pDeltaL, P.In1(pDeltaL, pDeltaR, P.Var("!d")))) deltasL)
                 (forEach pDeltaR pDeltaTy (P.Abs("!d", pDeltaR, P.In2(pDeltaL, pDeltaR, P.Var("!d")))) deltasR)))
     resTy, resBot, resJoin, (Ast.Sum(deltaTyL, deltaTyR, noRange)), pIso
+
+//****************************** UNDER CONSTRUCTION
+
+
+let makeLexProdSemilat (pTyL : P.Ty) (pTyR : P.Ty) (bL : P.Term) (bR : P.Term) 
+                       (compL : P.Term) (jR : P.Term) (deltaTyL : Ast.Ty) (deltaTyR : Ast.Ty) (pDeltaL : P.Ty) (pDeltaR : P.Ty)
+                       (pIsoL : P.Term) (pIsoR : P.Term) : P.Ty * P.Term * P.Term * Ast.Ty * P.Term =
+    
+    let resTy = P.Prod(pTyL, pTyR)
+    let resBot = P.Pair(bL, bR)
+    let resJoin = P.Abs("!x", resTy, P.Abs("!y", resTy,
+                    BoolCase(P.App(P.App(compL, P.Proj1(V("!x"))), P.Proj1(V("!y"))), 
+                             V("!y"),
+                             BoolCase(P.App(P.App(compL, P.Proj1(V("!y"))), P.Proj1(V("!x"))),
+                                      V("!x"),
+                                      P.Pair(P.Proj1(V("!x")), P.App(P.App(jR, P.Proj2(V("!x"))),P.Proj2(V("!y"))))))))
+    
+    let pDeltaTy = P.Prod(pDeltaL, pDeltaR)
+    let deltasL = P.App(pIsoL, P.Proj1(P.Var("!p")))
+    let deltasR = P.App(pIsoR, P.Proj2(P.Var("!p")))
+    let isoCodTy = P.List(P.Prod(pDeltaL, pDeltaR))
+
+    let pairWithList = 
+        P.Abs("!x", pDeltaL, P.Abs("!acc", isoCodTy, P.LetRec("!f", "!l", P.List(pDeltaR), P.List(pDeltaTy),
+            P.ListCase(P.Var("!l"), P.Var("!acc"), 
+                P.Abs("!h", pDeltaR, P.Abs("!t", P.List(pDeltaR), 
+                    P.Cons(P.Pair(P.Var("!x"), P.Var("!h")), P.App(P.Var("!f"), P.Var("!t")))))))))
+    
+    let pIso = 
+        P.Abs("!p", resTy, 
+           P.ListCase(deltasL, P.EmptyList(pDeltaTy), 
+            P.Abs("!l", pDeltaL, P.Abs("!t", P.List(pDeltaL), 
+                P.App(P.App(P.App(pairWithList, V("!l")), P.EmptyList(P.Prod(pDeltaL, pDeltaR))), deltasR)))))
+    
+    resTy, resBot, resJoin, (Ast.LexProd(deltaTyL, deltaTyR, noRange)), pIso
+
+//***********************************
 
 let makeIVarSemilat (elemTy : Ast.Ty) (pElemTy : P.Ty) (elemComp : P.Term) : P.Ty * P.Term * P.Term * Ast.Ty * P.Term =
     let resTy = P.List pElemTy
@@ -156,12 +194,86 @@ let makeSumToset (pTyL : P.Ty) (compL : P.Term) (pTyR : P.Ty) (compR : P.Term) =
                 P.Abs("!x'", pTyL, P.SumCase(P.Var("!y"), P.Abs("!y'", pTyL, P.App(P.App(compL,P.Var("!x'")), P.Var("!y'"))), P.Abs("!_", pTyL, pcfTrue))),
                 P.Abs("!x'", pTyR, P.SumCase(P.Var("!y"), P.Abs("!y'", pTyR, P.App(P.App(compR,P.Var("!x'")), P.Var("!y'"))), P.Abs("!_", pTyR, pcfFalse))))))          
 
+let rec kCheckChain (tenv : TypeEnvironment) (ty : Ty) : Check<SemChain> =
+    let errorMsg = "Type " + ty.ToString() + " is not a chain"
+    let tyVarEnv, tyBaseEnv, tyAliasEnv = tenv.tyVarEnv, tenv.tyBaseEnv, tenv.tyAliasEnv
+    match ty with
+    | TyId(name,rng) ->
+        match tyVarEnv.TryFind(name) with
+        | Some(pk) ->
+            match pk with
+            | Poset ->
+                Error ["type variable " + name + " bound to kind POSET", rng]
+            | Toset ->
+                let semPoset = P.TyVar("$" + name)
+                let semToset = P.Var("$" + name + "_comp")
+                Result (semToset)
+            | Semilattice ->
+                Error ["type variable " + name + " bound to kind SEMILAT", rng]
+        | None ->
+            match tyBaseEnv.TryFind(name) with
+            | Some( KProper(semPoset, Some(semToset),_,true,_) ) ->
+                Result (semToset)
+            | Some ( KProper(_,_,_,_,_) ) ->
+                Error [errorMsg, rng]
+            | Some ( KOperator(_,_,rng) ) ->
+                failwith "there should be no type operators in the base type environment"
+            | None ->
+                match tyAliasEnv.TryFind(name) with
+                | Some(ty) ->
+                    withError errorMsg rng (kCheckChain tenv ty)
+                | None ->
+                    Error ["type " + name + " not found", rng]  
+    | FunTy(_,_,_,rng) ->
+        Error [errorMsg + ": no function type is considered a chain", rng]
+    | Dictionary(_, _, rng) ->
+        Error [errorMsg + ": no dictionary type is considered a chain", rng]
+    | Capsule(_,_, rng) ->
+        Error [errorMsg + ": no capsule type is considered a chain", rng]
+    | Prod(tyL, tyR, rng) ->
+        Error [errorMsg + ": no product type is considered a chain", rng]
+    | Sum(tyL, tyR, rng) ->
+        Error [errorMsg + ": no product type is considered a chain", rng]
+    | IVar(_, rng) ->
+        Error [(errorMsg + ": no ivar type is considered a toset", rng)]
+    | TyOp(_, _, _, rng) ->
+        Error [(errorMsg + ": no type operator is totally ordered", rng)]
+    | ForallTy(_, _, _, rng) ->
+        Error [(errorMsg + ": forall types do not denote tosets",rng)]
+    | Partial(tyContents, rng) ->
+        Error [(errorMsg + ": we have not yet implemented chain kinding for monotone partiality", rng)]
+        //check {
+        //    let! comp = withError (errorMsg + ": left component is not a toset type") rng (kCheckChain tenv tyContents)
+        //    return P.Abs("!p", P.Sum())
+        //}
+    | TyApp(tyOp, tyArg, rng) ->
+        check {
+            // check that forall is type operator and argTy is proper type which matches domain of forall
+            let! kOp = withError errorMsg rng (kSynth tenv tyOp)
+            let! opDom, _ =
+                match kOp with
+                | KProper(_,_,_,_,rngOp) ->
+                    Error [errorMsg + ": " + tyOp.ToString() + " is not a type operator", rngOp]
+                | KOperator(dom, cod, _) ->
+                    Result (dom, cod)
+            let! kArg = withError errorMsg rng (kSynth tenv tyArg)
+            let! _, _, _, _ = getProper (tyArg.ToString()) kArg
+            let! _ = 
+                match hasKind kArg opDom with
+                | true -> 
+                    Result ()
+                | false -> 
+                    Error ["kind " + kArg.ToString() + " of type argument " + tyArg.ToString() + " does not match expected kind " + opDom.ToString(), rng]
+            let! pTy, pTermComp = withError errorMsg rng (kCheckToset tenv (Ty.normalize(tenv.tyAliasEnv, ty)))
+            return pTermComp
+        }
+
 /// kCheckToset tenv ty = res
 /// tenv - the type environment to check under
 /// ty   - the type to check
 /// res  - None if the type is a toset, 
 ///        (Some explanation), otherwise, where explanation is a stack of errors
-let rec kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Check<SemPoset * SemToset> =
+and kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Check<SemPoset * SemToset> =
     let errorMsg = "Type " + ty.ToString() + " is not a toset"
     let tyVarEnv, tyBaseEnv, tyAliasEnv = tenv.tyVarEnv, tenv.tyBaseEnv, tenv.tyAliasEnv
     match ty with
@@ -179,9 +291,9 @@ let rec kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Check<SemPoset * SemTos
                 Error ["type variable " + name + " bound to kind SEMILAT", rng]
         | None ->
             match tyBaseEnv.TryFind(name) with
-            | Some( KProper(semPoset, Some(semToset),_,_) ) ->
+            | Some( KProper(semPoset, Some(semToset),_,_,_) ) ->
                 Result (semPoset, semToset)
-            | Some ( KProper(_,_,_,_) ) ->
+            | Some ( KProper(_,_,_,_,_) ) ->
                 Error [errorMsg, rng]
             | Some ( KOperator(_,_,rng) ) ->
                 failwith "there should be no type operators in the base type environment"
@@ -225,12 +337,12 @@ let rec kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Check<SemPoset * SemTos
             let! kOp = withError errorMsg rng (kSynth tenv tyOp)
             let! opDom, _ =
                 match kOp with
-                | KProper(_,_,_,rngOp) ->
+                | KProper(_,_,_,_,rngOp) ->
                     Error [errorMsg + ": " + tyOp.ToString() + " is not a type operator", rngOp]
                 | KOperator(dom, cod, _) ->
                     Result (dom, cod)
             let! kArg = withError errorMsg rng (kSynth tenv tyArg)
-            let! _, _, _ = getProper (tyArg.ToString()) kArg
+            let! _, _, _, _ = getProper (tyArg.ToString()) kArg
             let! _ = 
                 match hasKind kArg opDom with
                 | true -> 
@@ -276,9 +388,9 @@ and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term *
                 Result (semPoset, bot, join, delta, iso)                
         | None ->
             match tyBaseEnv.TryFind(name) with
-            | Some( KProper(semPoset,_, (Some {bot = bot ; join = join ; tyDelta = tyDelta ; iso = iso}) ,_) ) ->
+            | Some( KProper(semPoset,_, (Some {bot = bot ; join = join ; tyDelta = tyDelta ; iso = iso}), _, _) ) ->
                 Result (semPoset, bot, join, tyDelta, iso)
-            | Some ( KProper(_,_,_,_) ) ->
+            | Some ( KProper(_,_,_,_,_) ) ->
                 Error [errorMsg, rng]
             | Some ( KOperator(_,_,_) ) ->
                 failwith "there should be no type operators in the base type environment"
@@ -309,6 +421,16 @@ and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term *
             let resTy, resBot, resJoin, resDelta, resIso = makeProdSemilat tyL tyR bL bR jL jR deltaL deltaR pDeltaL pDeltaR isoL isoR
             return resTy, resBot, resJoin, resDelta, resIso
         }
+    | LexProd(tyL, tyR, rng) ->
+        check {
+            let! compL = withError (errorMsg + ": left type is not a chain") rng (kCheckChain tenv tyL)
+            let! (pTyL, botL, _, deltaL, isoL) = kCheckSemilattice tenv tyL
+            let! (pTyR, botR, joinR, deltaR, isoR) = withError (errorMsg + ": right type is not well-kinded") rng (kCheckSemilattice tenv tyR)
+            let! pDeltaL = kCheckProset tenv deltaL
+            let! pDeltaR = kCheckProset tenv deltaR
+            let pTy, bot, join, delta, iso = makeLexProdSemilat pTyL pTyR botL botR compL joinR deltaL deltaR pDeltaL pDeltaR isoL isoR
+            return pTy, bot, join, delta, iso
+        }
     | Sum(_,_,rng) ->
         Error [(errorMsg + ": sum types are not semilattice types",rng)]
     | IVar(elemTy, rng) ->
@@ -336,12 +458,12 @@ and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term *
             let! kOp = withError errorMsg rng (kSynth tenv tyOp)
             let! opDom, _ =
                 match kOp with
-                | KProper(_,_,_,rngOp) ->
+                | KProper(_,_,_,_,rngOp) ->
                     Error [errorMsg + ": " + tyOp.ToString() + " is not a type operator", rngOp]
                 | KOperator(dom, cod, _) ->
                     Result (dom, cod)
             let! kArg = withError errorMsg rng (kSynth tenv tyArg)
-            let! _, _, _ = getProper (tyArg.ToString()) kArg
+            let! _, _, _, _ = getProper (tyArg.ToString()) kArg
             let! _ = 
                 match hasKind kArg opDom with
                 | true -> 
@@ -362,7 +484,7 @@ and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty> =
             Result (P.TyVar("$" + name))
         | None ->
             match tyBaseEnv.TryFind(name) with
-            | Some( KProper(semPoset,_,_,_) ) ->
+            | Some( KProper(semPoset,_,_,_,_) ) ->
                 Result (semPoset)
             | Some ( KOperator(_,_,_) ) ->
                 failwith "there should be no type operators in the base type environment"
@@ -394,6 +516,12 @@ and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty> =
             let! pTyL = withError (errorMsg + ": left component type is not a poset") rng (kCheckProset tenv tyL)
             let! pTyR = withError (errorMsg + ": right component type is not a poset") rng (kCheckProset tenv tyR)
             return P.Prod(pTyL, pTyR)
+        }
+    | LexProd(tyL, tyR, rng) ->
+        check {
+            let! pTyL = withError (errorMsg + ": left component type is not a poset") rng (kCheckProset tenv tyL)
+            let! pTyR = withError (errorMsg + ": right component type is not a poset") rng (kCheckProset tenv tyR)
+            return P.Prod(pTyL, pTyR)            
         }
     | Sum(tyL, tyR, rng) ->
         check {
@@ -437,12 +565,12 @@ and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty> =
             let! kOp = withError errorMsg rng (kSynth tenv tyOp)
             let! opDom, _ =
                 match kOp with
-                | KProper(_,_,_,rngOp) ->
+                | KProper(_,_,_,_,rngOp) ->
                     Error [errorMsg + ": " + tyOp.ToString() + " is not a type operator", rngOp]
                 | KOperator(dom, cod, _) ->
                     Result (dom, cod)
             let! kArg = withError errorMsg rng (kSynth tenv tyArg)
-            let! _, _, _ = getProper (tyArg.ToString()) kArg
+            let! _, _, _, _ = getProper (tyArg.ToString()) kArg
             let! _ = 
                 match hasKind kArg opDom with
                 | true -> 
@@ -462,21 +590,25 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
         | Some(pk) ->
             match pk with
             | Poset ->
-                Result (KProper(P.TyVar("$" + name), None, None, noRange))
+                Result (KProper(P.TyVar("$" + name), None, None, false, noRange))
             | Toset ->
                 let semPoset = P.TyVar("$" + name)
                 let comp = P.Var("$" + name + "_comp")
-                Result (KProper(semPoset, Some(comp), None, noRange))    
+                Result (KProper(semPoset, Some(comp), None, false, noRange))    
             | Semilattice ->
                 let semPoset = P.TyVar("$" + name)
                 let bot = P.Var("$" + name + "_bot")
                 let join = P.Var("$" + name + "_join")
                 let tyDelta = Ast.TyId(name + "Delta", noRange)
                 let iso = P.Var("$" + name + "_iso")
-                Result (KProper(semPoset, None, Some { bot = bot ; join = join ; tyDelta = tyDelta ; iso = iso }, noRange))    
+                Result (KProper(semPoset, None, Some { bot = bot ; join = join ; tyDelta = tyDelta ; iso = iso }, false, noRange))
+            | Chain ->
+                let semPoset = P.TyVar("$" + name)
+                let comp = P.Var("$" + name + "_comp")
+                Result (KProper(semPoset, Some(comp), None, false, noRange))                
         | None ->
             match tyBaseEnv.TryFind(name) with
-            | Some( KProper(_,_,_,_) as k ) ->
+            | Some( KProper(_,_,_,_,_) as k ) ->
                 Result k
             | Some ( KOperator(_,_,_) ) ->
                 failwith "there should be no type operators in the base type environment"
@@ -490,16 +622,16 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
         check {
             let! kDom = withError (errorMsg + ": domain is not well-kinded") rng (kSynth tenv dom)
             let! kCod = withError (errorMsg + ": codomain is not well-kinded") rng (kSynth tenv cod)
-            let! pDomTy, _, _ = getProper "domain type" kDom
-            let! pCodTy, _, _ = getProper "codomain type" kCod
-            return KProper(P.Fun(pDomTy,pCodTy), None, None, noRange)
+            let! pDomTy, _, _, _ = getProper "domain type" kDom
+            let! pCodTy, _, _, _ = getProper "codomain type" kCod
+            return KProper(P.Fun(pDomTy,pCodTy), None, None, false, noRange)
         }
      | Dictionary(dom, cod, rng) ->
         check {
             let! kDom = withError (errorMsg + ": domain is not a well-kinded") rng (kSynth tenv dom)
             let! kCod = withError (errorMsg + ": codomain is not well-kinded") rng (kSynth tenv cod)
-            let! pDomTy, domToset, domSemilat = getProper "domain type" kDom
-            let! pCodTy, _, codSemilat = getProper "codomain type" kCod
+            let! pDomTy, domToset, _, _ = getProper "domain type" kDom
+            let! pCodTy, _, codSemilat, _ = getProper "codomain type" kCod
             let! pDomComp = 
                 match domToset with
                 | Some(comp) -> Result comp
@@ -510,7 +642,7 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                     check {
                         let! pCodDelta = kCheckProset tenv deltaCod
                         let pResTy,pBot,pJoin,tyDelta,pIso  = makeDictionarySemilat pDomTy pCodTy dom deltaCod pDomComp jCod pCodDelta isoCod
-                        return KProper(pResTy, None, Some { bot = pBot ; join = pJoin ; tyDelta = tyDelta ; iso = pIso }, noRange)
+                        return KProper(pResTy, None, Some { bot = pBot ; join = pJoin ; tyDelta = tyDelta ; iso = pIso }, false, noRange)
                     }
                 | None ->
                     Error ["Type of dictionary codomain should be a semilattice type, but " + cod.ToString() + " is not one.", rng]
@@ -520,14 +652,14 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
         check {
             // should we generate an error here if q is *?
             let! pTyContents = withError (errorMsg + ": capsule content not a poset") rng (kCheckProset tenv tyContents)
-            return KProper(pTyContents, None, None, noRange)
+            return KProper(pTyContents, None, None, false, noRange)
         }
     | Prod(tyL, tyR, rng) ->
         check {
             let! kL = withError (errorMsg + ": left type is not well-kinded") rng (kSynth tenv tyL)
             let! kR = withError (errorMsg + ": right type is not well-kinded") rng (kSynth tenv tyR)
-            let! pTyL, optTosetL, optSemilatL = getProper "left type" kL
-            let! pTyR, optTosetR, optSemilatR = getProper "right type" kR
+            let! pTyL, optTosetL, optSemilatL, _ = getProper "left type" kL
+            let! pTyR, optTosetR, optSemilatR, _ = getProper "right type" kR
             let pTy = P.Prod(pTyL, pTyR)
             let semToset = 
                 match optTosetL, optTosetR with
@@ -547,14 +679,41 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                     }
                 | _ ->
                     Result None
-            return KProper(pTy, semToset, semSemilat, noRange)
+            return KProper(pTy, semToset, semSemilat, false, noRange)
+        }
+    | LexProd(tyL, tyR, rng) ->
+        check {
+            let! kL = withError (errorMsg + ": left type is not well-kinded") rng (kSynth tenv tyL)
+            let! kR = withError (errorMsg + ": right type is not well-kinded") rng (kSynth tenv tyR)
+            let! pTyL, optTosetL, optSemilatL, isChainL = getProper "left type" kL
+            let! pTyR, optTosetR, optSemilatR, _ = getProper "right type" kR
+            let pTy = P.Prod(pTyL, pTyR)
+            let semToset = 
+                match optTosetL, optTosetR with
+                | Some(compL), Some(compR) ->
+                    let _, comp = makeProdToset pTyL compL pTyR compR
+                    Some(comp)
+                | _ ->
+                    None
+            let! semSemilat =
+                match isChainL, optTosetL, optSemilatL, optSemilatR with
+                | true, Some(compL), Some({bot = botL ; join = joinL ; tyDelta = deltaL ; iso = isoL }), Some({bot = botR ; join = joinR ; tyDelta = deltaR ; iso = isoR }) ->
+                    check {
+                        let! pDeltaL = kCheckProset tenv deltaL
+                        let! pDeltaR = kCheckProset tenv deltaR
+                        let _, bot, join, delta, iso = makeLexProdSemilat pTyL pTyR botL botR compL joinR deltaL deltaR pDeltaL pDeltaR isoL isoR
+                        return (Some {bot = bot; join = join ; tyDelta = delta ; iso = iso })
+                    }
+                | _ ->
+                    Result None
+            return KProper(pTy, semToset, semSemilat, false, noRange)
         }
     | Sum(tyL, tyR, rng) ->
         check {
             let! kL = withError (errorMsg + ": left type is not well-kinded") rng (kSynth tenv tyL)
             let! kR = withError (errorMsg + ": right type is not well-kinded") rng (kSynth tenv tyR)
-            let! pTyL, optTosetL, _ = getProper "left type" kL
-            let! pTyR, optTosetR, _ = getProper "right type" kR
+            let! pTyL, optTosetL, _, _ = getProper "left type" kL
+            let! pTyR, optTosetR, _, _ = getProper "right type" kR
             let pTy = P.Sum(pTyL, pTyR)
             let semToset = 
                 match optTosetL, optTosetR with
@@ -563,13 +722,13 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                     Some(comp)
                 | _ ->
                     None
-            return KProper(pTy, semToset, None, noRange)
+            return KProper(pTy, semToset, None, false, noRange)
         }
     | IVar(elemTy, rng) ->
         check {
             let! pElemTy, pComp = withError (errorMsg + ": underlying type is not totally ordered") rng (kCheckToset tenv elemTy)
             let resTy, bot, join, delta, iso  = makeIVarSemilat elemTy pElemTy pComp
-            return KProper(resTy, None, Some({bot = bot ; join = join ; tyDelta = delta ; iso = iso}), noRange) 
+            return KProper(resTy, None, Some({bot = bot ; join = join ; tyDelta = delta ; iso = iso}), false, noRange) 
         }
     | TyOp(varId, kind, body, rng) ->
         // this case is purely for checking - we don't actually generate semantics 
@@ -583,28 +742,28 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
     | ForallTy(varId, kind, body, rng) ->
         check {
             let! kCod = withError (errorMsg + ": body not well-formed") rng (kSynth {tenv with tyVarEnv = tyVarEnv.Add(varId,kind)} body)
-            let! pBodyTy,_,_ = getProper "forall body" kCod
+            let! pBodyTy,_,_,_ = getProper "forall body" kCod
             match kind with
             | Poset ->
                 let pTy = P.ForallTy("$" + varId, pBodyTy)
-                return (KProper(pTy, None, None, noRange))
+                return (KProper(pTy, None, None, false, noRange))
             | Toset ->
                 let ty = P.TyVar("$" + varId)
                 let compTy = Fun(ty,Fun(ty,pBoolTy))
                 let pTy = P.ForallTy("$" + varId, P.Fun(compTy, pBodyTy))
-                return (KProper(pTy,None,None,noRange))
+                return (KProper(pTy,None,None,false,noRange))
             | Semilattice ->
                 let ty = P.TyVar("$" + varId)
                 let tyDelta = P.TyVar("$" + varId + "Delta")
                 let joinTy = Fun(ty,Fun(ty,ty))
                 let isoTy = Fun(ty, List(tyDelta))
                 let pTy = P.ForallTy("$" + varId, P.Fun(ty, P.Fun(joinTy, P.ForallTy("$" + varId + "Delta", P.Fun(isoTy, pBodyTy)))))
-                return KProper(pTy,None,None,noRange)
+                return KProper(pTy,None,None,false,noRange)
         }
     | Partial(tyContents, rng) ->
         check {
             let! k = withError errorMsg rng (kSynth tenv tyContents)
-            let! resTy, _, optSemi = getProper "underlying type" k
+            let! resTy, _, optSemi,_ = getProper "underlying type" k
             let! semi = 
                 match optSemi with
                 | Some {bot = bot'; join = join' ; tyDelta = delta' ; iso = iso'} ->
@@ -615,7 +774,7 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                     }
                 | None ->
                     Result None
-            return KProper(P.Sum(resTy, Unit), None, semi, noRange)
+            return KProper(P.Sum(resTy, Unit), None, semi, false, noRange)
         }
     | TyApp(forallTy, argTy, rng) ->
         check {
@@ -623,7 +782,7 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
             let! kOp = withError errorMsg rng (kSynth tenv forallTy)
             let! opDom, opCod =
                 match kOp with
-                | KProper(_,_,_,rngOp) ->
+                | KProper(_,_,_,_,rngOp) ->
                     Error [errorMsg + ": " + forallTy.ToString() + " is not a type operator", rngOp]
                 | KOperator(dom, cod, rng) ->
                     Result (dom, cod)

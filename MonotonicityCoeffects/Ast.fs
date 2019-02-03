@@ -83,12 +83,14 @@ type ProperKind =
     | Toset 
     | Poset
     | Semilattice
+    | Chain
 
     override this.ToString() =
         match this with
         | Toset -> "TOSET"
         | Poset -> "POSET"
-        | Semilattice -> "SEMILATTICE"                
+        | Semilattice -> "SEMILATTICE"    
+        | Chain -> "CHAIN"
 
 type SubtypeResult =
     | Success
@@ -106,6 +108,8 @@ type Ty =
   | Capsule of ty : Ty * q : Coeffect * pos : (Position * Position)
   /// A componentwise ordered product
   | Prod of t1 : Ty * t2 : Ty  * pos : (Position * Position)
+  /// A lexicographical product
+  | LexProd of t1 : Ty * t2 : Ty * pos : (Position * Position)
   /// A sum
   | Sum of t1 : Ty * t2 : Ty * pos : (Position * Position)
   /// An ivar
@@ -136,6 +140,8 @@ type Ty =
     /// A componentwise ordered product
     | Prod(tyL, tyR, rng) ->
         Prod(Ty.subst a x tyL, Ty.subst a x tyR, rng)
+    | LexProd(tyL, tyR, rng) ->
+        LexProd(Ty.subst a x tyL, Ty.subst a x tyR, rng)
     | Sum(tyL, tyR, rng) ->
         Sum(Ty.subst a x tyL, Ty.subst a x tyR, rng)
     /// An ivar
@@ -213,6 +219,16 @@ type Ty =
             match Ty.reduce aliasEnv tyR with
             | Some(tyR') ->
                 Some(Prod(tyL,tyR',rng))
+            | None ->
+                None
+    | LexProd(tyL,tyR,rng) ->
+        match Ty.reduce aliasEnv tyL with
+        | Some(tyL') ->
+            Some(LexProd(tyL',tyR,rng))
+        | None ->
+            match Ty.reduce aliasEnv tyR with
+            | Some(tyR') ->
+                Some(LexProd(tyL,tyR',rng))
             | None ->
                 None
     | Sum(tyL, tyR, rng) ->
@@ -295,6 +311,12 @@ type Ty =
             let! _ = withError (errorMsg + ": right component") noRange (Ty.IsSubtype aliasEnv aR bR)
             return ()
         }
+    | (LexProd(aL, aR, _), LexProd(bL, bR, _)) ->
+        check {
+            let! _ = withError (errorMsg + ": left component") noRange (Ty.IsSubtype aliasEnv aL bL)
+            let! _ = withError (errorMsg + ": right component") noRange (Ty.IsSubtype aliasEnv aR bR)
+            return ()            
+        }
     | Sum(aL,aR,_), Sum(bL,bR,_) ->
         check {
             let! _ = withError (errorMsg + ": left component") noRange (Ty.IsSubtype aliasEnv aL bL)
@@ -340,6 +362,8 @@ type Ty =
             "(" + q.ToString() + " " + ty.ToString() + ")"
         | Prod(tyL, tyR, _) ->
             "(" + tyL.ToString() + " * " + tyR.ToString() + ")"
+        | LexProd(tyL, tyR, _) ->
+            "(" + tyL.ToString() + " ^ " + tyR.ToString() + ")"
         | Sum(tyL, tyR, _) ->
             "(" + tyL.ToString() + " + " + tyR.ToString() + ")"
         | IVar(tyContents,_) ->
@@ -353,25 +377,28 @@ type Ty =
         | TyApp(forallTy, argTy, rng) ->
             "(" + forallTy.ToString() + " " + argTy.ToString() + ")" 
 
-/// Semantic interpretation of toset as a PCF comparison operator
+/// Interpretation of toset type as a PCF comparison operator
 type SemToset = PCF.Term
 /// Posets semantically interpreted as PCF type paired with predicate (the latter irrelevant for our purposes)
 type SemPoset = PCF.Ty
 /// Semilattices semantically interpreted as tuple of PCF terms (bottom element , join operator)
 type SemSemilat = { bot : PCF.Term ; join : PCF.Term ; tyDelta : Ty ; iso : PCF.Term }
+/// Interpretation of chain type as comparison operator
+type SemChain = PCF.Term
 
 type Kind =
   /// poset - underlying PCF proper type (i.e. the set underlying the poset -- the order is an RHOL predicate beyond the 
   ///         scope of this prototype)
   /// toset - Some(semToset) if classified type provides a toset interpretation, None otherwise
   /// semilat - Some(semSemilat) if classified type provides a semilattice interpretation, None otherwise
-  | KProper of poset : SemPoset * toset : Option<SemToset> * semilat : Option<SemSemilat> * Range
+  /// chain - a semilattice which is also a toset where the total order coincides with the semilattice order
+  | KProper of poset : SemPoset * toset : Option<SemToset> * semilat : Option<SemSemilat> * chain : bool * Range
   | KOperator of dom : ProperKind * cod : Kind * Range
 
 /// If k is KProper, return true iff it holds a component representing the proper kind p
 let hasKind (k : Kind) (p : ProperKind) =
     match k with
-    | KProper(_,toset,semilat,_) ->
+    | KProper(_,toset,semilat,chain,_) ->
         match p with
         | Poset ->
             true
@@ -379,6 +406,8 @@ let hasKind (k : Kind) (p : ProperKind) =
             toset.IsSome
         | Semilattice ->
             semilat.IsSome
+        | Chain ->
+            chain
     | KOperator(_,_,_) ->
         false
 
@@ -403,7 +432,10 @@ type Expr =
   | Cons of e1 : Expr * e2 : Expr * e3 :Expr * Range
   | Fst of pair : Expr * Range
   | Snd of pair : Expr * Range
+  | LFst of pair : Expr * Range
+  | LSnd of pair : Expr * Range
   | Pair of fst : Expr * snd : Expr * Range
+  | LexPair of fst : Expr * snd : Expr * Range
   | Case of scrut : Expr * target : Ty * lname : string * 
             lElim : Expr * rname : string * rElim : Expr * Range
   | Inl of lty : Ty * rTy : Ty * e : Expr * Range
@@ -440,6 +472,9 @@ type Expr =
     | Cons(_,_,_,rng)
     | Fst(_,rng)
     | Snd(_,rng)
+    | LFst(_,rng)
+    | LSnd(_,rng)
+    | LexPair(_,_,rng)
     | Pair(_,_,rng)
     | Case(_,_,_,_,_,_,rng)
     | Inl(_,_,_,rng)
@@ -558,6 +593,8 @@ let rec toMC (tyAliases : Map<string, Ty>) (t : PCF.Term) (ty : Ty) (tyName : Op
         toMC tyAliases t ty' None
     | Prod(tyL, tyR, _), PCF.Pair(t1, t2) ->
         "(" + (toMC tyAliases t1 tyL None) + ", " + (toMC tyAliases t2 tyR None) + ")"
+    | LexProd(tyL, tyR, _), PCF.Pair(t1,t2) ->
+        "<<" + (toMC tyAliases t1 tyL None) + ", " + (toMC tyAliases t2 tyR None) + ">>"
     | Sum(tyL, _, _), PCF.In1(_,_,t') ->
         "inl " + (toMC tyAliases t' tyL None)
     | Sum(_, tyR, _), PCF.In2(_,_,t') ->
@@ -586,7 +623,7 @@ and toMCDictionary (tyAliases : Map<string, Ty>) (t : PCF.Term) (dom : Ty) (cod 
       toMC tyAliases k dom None + " -> " + toMC tyAliases v cod None
     | PCF.Cons(PCF.Pair(k,v), rest) ->
       toMC tyAliases k dom None + " -> " + toMC tyAliases v cod None + ", " + toMCDictionary tyAliases rest dom cod
-
+      
 //        match this with
 //        | TyId(name,_) ->
 //            name

@@ -209,30 +209,35 @@ let baseTyMap =
                     P.Prim("Nat"), 
                     Some(primLessNat), 
                     Some { bot = PrimNatVal(0) ; join = primJoinNat ; tyDelta = TyId("Nat",noRange) ; iso = primIsoNat }, 
+                    true,
                     noRange));
 
          ("NatU", KProper(
                     pNatUpperTy,
                     Some(primLessNatUpper),
                     Some { bot = P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ; join = primJoinNatUpper ; tyDelta = TyId("NatU", noRange) ; iso = primIsoNatUpper },
+                    true,
                     noRange));
 
          ("Unit", KProper(
                     P.Unit,
                     Some(primLessUnit),
                     None,
+                    false,
                     noRange));
 
          ("Prop", KProper(
                     P.Sum(P.Unit, P.Unit),
                     Some(primLessProp),
                     Some{bot = In1(P.Unit, P.Unit, P.PrimUnitVal); join = primJoinProp ; tyDelta = TyId("Unit", noRange) ; iso = primIsoProp},
+                    true,
                     noRange)) ;
 
         ("Bool", KProper(
                     P.Sum(P.Unit, P.Unit),
                     Some(primLessBool),
                     None,
+                    true,
                     noRange))])
 
 

@@ -65,6 +65,8 @@ rule token = parse
 | "-"            { MINUS }
 | "fst"          { FST }
 | "snd"          { SND }
+| "lfst"         { LFST }
+| "lsnd"         { LSND }
 | "inl"          { INL }
 | "inr"          { INR }
 | "iget"         { IGET }
@@ -75,8 +77,11 @@ rule token = parse
 | "join"         { JOIN }
 | "?"            { QUESTION }
 | "*"            { ASTERISK }
-| "("            { LPAREN}
+| "^"            { CARET }
+| "("            { LPAREN }
 | ")"            { RPAREN }
+| "<<"           { LLBRACK }
+| ">>"           { RRBRACK }
 | "in"           { IN }
 | "and"          { AND }
 | "let"          { LET }
