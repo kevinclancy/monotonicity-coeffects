@@ -63,5 +63,5 @@ and graph =
   }
 
 in
- (relax graph { 1 -> << u0 , 1 >> : SPMap })
+ (relax graph { 3 -> << u0 , 3 >> : SPMap })
 end
