@@ -18,10 +18,10 @@ Semilattice formation check succeeded:
 
 As discussed in the paper, the primitive type Nat, of natural numbers, is a semilattice type whose delta type is Nat.
 
-> checkSemilat Bool
+> checkSemilat Prop
 
 Semilattice formation check succeeded:
- Bool is a semilattice type with delta type Unit
+ Prop is a semilattice type with delta type Unit
 
 > checkSemilat Unit
 checkSemilat Unit
@@ -70,11 +70,11 @@ InteractiveShell.tb places a hole (##) in the expr position, which triggers the 
 all defined types in scope.
 
 ``
-Set = typefun (x : TOSET) x |> Bool end;
+Set = typefun (x : TOSET) x |> Prop end;
 ``
 
 The first line defines a type operator: given any toset type T,
-Set T is equal to the dictionary type T |> Bool, which intuitively 
+Set T is equal to the dictionary type T |> Prop, which intuitively 
 corresponds to finite sets of element-type T.
 
 The final definition contains a type constructor that we have not yet seen.
@@ -100,7 +100,7 @@ Since we're using text source-code, the notation does not match the paper exactl
 We list the types supported by the prototype:
 τ,σ,ι ::= 
  Unit - Unit type
- Bool - Booleans
+ Prop - Propositional values
  Nat - Natural Numbers 
  | τ | - IVar of content type τ
  τ * τ - Product
@@ -121,7 +121,7 @@ so if the parser produces an error at an application, try parenthesizing the app
 Introduction forms
 ==================
 
-λMC provides literals for natural numbers (0,1,2,...), booleans (true, false), and unit (unit).
+λMC provides literals for natural numbers (0,1,2,...), propositionals (unknown, known), and unit (unit).
 
 A pair containing the values of e₁ and e₂ in the left and right components is written (e₁ , e₂).
 

@@ -1,5 +1,5 @@
 types
-  Set = typefun (x : TOSET) x |> Bool end;
+  Set = typefun (x : TOSET) x |> Prop end;
   ActionId = Nat;
   ItemId = Nat;
   NetworkAddr = Nat;
