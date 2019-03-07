@@ -106,7 +106,7 @@ We list the types supported by the prototype:
  τ * τ - Product
  τ + τ - Sum
  τ |> τ - Dictionary
- [ τ ] - Monotonically partial computations of result type T
+ [ τ ] - Monotonically exception-prone computations of result type τ
  (τ τ ...) - Type application
  (typefun (x : K) τ) - Type function definition
 
@@ -140,7 +140,7 @@ is sugar for
 (k₁ ↦ v₁) :: … :: (kₙ ↦ vₙ) :: ⊥σ
 ``
 
-The unit for monotone partiality is written [e], producing a result containing e's value.
+The unit for monotone exceptionality is written [e], producing a result containing e's value.
 
 Bindings and Eliminators
 ========================
@@ -173,7 +173,7 @@ let | x | = e₁ in e₂ end
 
 If e₁ has type |τ| and e₂ has semilattice type σ, this expression has
 type [σ]. If e₁ evaluates to an empty ivar, the expression evaluates to [⊥σ], 
-a monotonically partial result whose value is the bottom element of semilattice σ. 
+a monotonically exception-prone result whose value is the bottom element of semilattice σ. 
 If e₁ evaluates to a singleton { p }, then the expression evaluates to [ [p/x]e₂ ]. 
 Otherwise, it evaluates to ⊤σ; i.e. the "undefined" value.
 
@@ -194,7 +194,7 @@ w(1) = [k_{1}/xk][v_{1}/xv][w(2)/xacc]e₂ ⊔σ w(2)
 
 The value of w(1) is the value produced by the elimination form.
 
-The binding form for monadic partiality appears as:
+The binding form for monadic exceptionality appears as:
 ``
 let [ x ] <- e₁ in e₂ end
 ``
