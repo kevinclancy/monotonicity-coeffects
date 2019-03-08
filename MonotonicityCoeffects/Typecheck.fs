@@ -464,7 +464,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                 | Exception(bindTy,_) ->
                     Result bindTy
                 | _ ->
-                    Error [errorMsg + ": monadic let expected a exceptional computation in body position, but instead got " + partialCompTy.ToString(),rng]
+                    Error [errorMsg + ": monadic let expected a exceptional computation in body position, but instead got " + exceptionalCompTy.ToString(),rng]
             let! pBindTy = kCheckProset ctxt.tenv bindTy
             let venv' = venv.Add(varId, bindTy)
             let! bodyTy, bodyQ, pBodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } bodyExpr)

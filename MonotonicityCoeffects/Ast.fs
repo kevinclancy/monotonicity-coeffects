@@ -624,26 +624,3 @@ and toMCDictionary (tyAliases : Map<string, Ty>) (t : PCF.Term) (dom : Ty) (cod 
     | PCF.Cons(PCF.Pair(k,v), rest) ->
       toMC tyAliases k dom None + " -> " + toMC tyAliases v cod None + ", " + toMCDictionary tyAliases rest dom cod
       
-//        match this with
-//        | TyId(name,_) ->
-//            name
-//        | FunTy(dom,q,cod,_) ->
-//            "(" + dom.ToString() + " ->" + q.ToString() + " " + cod.ToString() + ")"
-//        | Dictionary(dom,cod,_) ->
-//            "(" + dom.ToString() + " |> " + cod.ToString() + ")"
-//        | Capsule(ty,q,_) ->
-//            "(" + q.ToString() + " " + ty.ToString() + ")"
-//        | Prod(tyL, tyR, _) ->
-//            "(" + tyL.ToString() + " * " + tyR.ToString() + ")"
-//        | Sum(tyL, tyR, _) ->
-//            "(" + tyL.ToString() + " + " + tyR.ToString() + ")"
-//        | IVar(tyContents,_) ->
-//            "!" + tyContents.ToString() + "!"
-//        | TyOp(varId, kind, body,_) ->
-//            "(TypeFun (" + varId + " : " + kind.ToString() + "). " + body.ToString() + ")"
-//        | ForallTy(varId, kind, body,_) ->
-//            "(Forall (" + varId + " : " + kind.ToString() + "). " + body.ToString() + ")"
-//        | Partial(ty,_) ->
-//            "[" + ty.ToString() + "]"
-//        | TyApp(forallTy, argTy, rng) ->
-//            "(" + forallTy.ToString() + " " + argTy.ToString() + ")" 

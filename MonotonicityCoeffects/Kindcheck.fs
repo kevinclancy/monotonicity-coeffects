@@ -241,7 +241,7 @@ let rec kCheckChain (tenv : TypeEnvironment) (ty : Ty) : Check<SemChain> =
     | ForallTy(_, _, _, rng) ->
         Error [(errorMsg + ": forall types do not denote tosets",rng)]
     | Exception(tyContents, rng) ->
-        Error [(errorMsg + ": we have not yet implemented chain kinding for monotone partiality", rng)]
+        Error [(errorMsg + ": we have not yet implemented chain kinding for monotone exceptionality", rng)]
         //check {
         //    let! comp = withError (errorMsg + ": left component is not a toset type") rng (kCheckChain tenv tyContents)
         //    return P.Abs("!p", P.Sum())
@@ -330,7 +330,7 @@ and kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Check<SemPoset * SemToset> 
     | ForallTy(_, _, _, rng) ->
         Error [(errorMsg + ": forall types do not denote tosets",rng)]
     | Exception(_, rng) ->
-        Error [(errorMsg + ": no type in the partiality monad is totally ordered",rng)]
+        Error [(errorMsg + ": no type in the exceptionality monad is totally ordered",rng)]
     | TyApp(tyOp, tyArg, rng) ->
         check {
             // check that forall is type operator and argTy is proper type which matches domain of forall
@@ -449,7 +449,7 @@ and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term *
             let! (pElemTy, bot, join, deltaTy, iso) = 
                 withError (errorMsg + ": [ty] is only a semilattice if ty is a semilattice") rng (kCheckSemilattice tenv elemTy)
             let! pDeltaTy = kCheckProset tenv deltaTy
-            let resTy, resBot, resJoin, resDelta, resIso = makePartialSemilat elemTy pElemTy deltaTy pDeltaTy bot join iso
+            let resTy, resBot, resJoin, resDelta, resIso = makeExceptionSemilat elemTy pElemTy deltaTy pDeltaTy bot join iso
             return (resTy, resBot, resJoin, resDelta, resIso)
         }
     | TyApp(tyOp, tyArg, rng) ->
@@ -769,7 +769,7 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                 | Some {bot = bot'; join = join' ; tyDelta = delta' ; iso = iso'} ->
                     check {
                         let! pDelta' = kCheckProset tenv delta' 
-                        let _, bot, join, delta, iso = makePartialSemilat tyContents resTy delta' pDelta' bot' join' iso'
+                        let _, bot, join, delta, iso = makeExceptionSemilat tyContents resTy delta' pDelta' bot' join' iso'
                         return (Some {bot = bot; join = join; tyDelta = delta ; iso = iso })
                     }
                 | None ->
