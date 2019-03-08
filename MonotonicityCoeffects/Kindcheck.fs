@@ -153,7 +153,7 @@ let makeIVarSemilat (elemTy : Ast.Ty) (pElemTy : P.Ty) (elemComp : P.Term) : P.T
     let pIso = P.Abs("!x", resTy, P.Var("!x"))
     resTy, bot, join, deltaTy, pIso
 
-let makePartialSemilat (underlyingTy : Ty) (pTy : P.Ty) (deltaTy : Ty) (pDeltaTy : P.Ty) 
+let makeExceptionSemilat (underlyingTy : Ty) (pTy : P.Ty) (deltaTy : Ty) (pDeltaTy : P.Ty) 
                        (bot : P.Term) (join : P.Term) (iso : P.Term) : P.Ty * P.Term * P.Term * Ast.Ty * P.Term =
     let resTy = P.Sum(pTy, P.Unit)
     let resBot = P.In1(pTy,P.Unit,bot)
@@ -165,7 +165,7 @@ let makePartialSemilat (underlyingTy : Ty) (pTy : P.Ty) (deltaTy : Ty) (pDeltaTy
                         P.Abs("!y'", pTy, P.In1(pTy,P.Unit,P.App(P.App(join, V("!x'")), V("!y'")))),
                         P.In2(pTy,P.Unit,P.PrimUnitVal))),
                 P.Abs("!x'", P.Unit, P.In2(pTy,P.Unit,P.PrimUnitVal)))))
-    let resDeltaTy = Ast.Partial(deltaTy, noRange)
+    let resDeltaTy = Ast.Exception(deltaTy, noRange)
     let pResDeltaTy = P.Sum(pDeltaTy, P.Unit)
     let pMapDelta = P.Abs("!x", pDeltaTy, P.In1(pDeltaTy, P.Unit, P.Var("!x")))
     let pDeltasL = P.App(iso, P.Var("!l"))
@@ -240,7 +240,7 @@ let rec kCheckChain (tenv : TypeEnvironment) (ty : Ty) : Check<SemChain> =
         Error [(errorMsg + ": no type operator is totally ordered", rng)]
     | ForallTy(_, _, _, rng) ->
         Error [(errorMsg + ": forall types do not denote tosets",rng)]
-    | Partial(tyContents, rng) ->
+    | Exception(tyContents, rng) ->
         Error [(errorMsg + ": we have not yet implemented chain kinding for monotone partiality", rng)]
         //check {
         //    let! comp = withError (errorMsg + ": left component is not a toset type") rng (kCheckChain tenv tyContents)
@@ -329,7 +329,7 @@ and kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Check<SemPoset * SemToset> 
         Error [(errorMsg + ": no type operator is totally ordered", rng)]
     | ForallTy(_, _, _, rng) ->
         Error [(errorMsg + ": forall types do not denote tosets",rng)]
-    | Partial(_, rng) ->
+    | Exception(_, rng) ->
         Error [(errorMsg + ": no type in the partiality monad is totally ordered",rng)]
     | TyApp(tyOp, tyArg, rng) ->
         check {
@@ -444,7 +444,7 @@ and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term *
         Error [(errorMsg + ": type operators do not denote semilattices", rng)]
     | ForallTy(_, _, _, rng) ->
         Error [(errorMsg + ": forall types do not denote semilattices",rng)]
-    | Partial(elemTy,rng) ->
+    | Exception(elemTy,rng) ->
         check {
             let! (pElemTy, bot, join, deltaTy, iso) = 
                 withError (errorMsg + ": [ty] is only a semilattice if ty is a semilattice") rng (kCheckSemilattice tenv elemTy)
@@ -554,7 +554,7 @@ and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty> =
                 let isoTy = Fun(ty, List(tyDelta))
                 return P.ForallTy("$" + varId, P.Fun(ty, P.Fun(joinTy, P.ForallTy("$" + varId + "Delta", P.Fun(isoTy, pBodyTy)))))
         }
-    | Partial(tyContents,rng) ->
+    | Exception(tyContents,rng) ->
         check {
             let! pTyContents = withError (errorMsg + ": underlying type is not a poset") rng (kCheckProset tenv tyContents)
             return P.Sum(pTyContents, P.Unit)
@@ -760,7 +760,7 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                 let pTy = P.ForallTy("$" + varId, P.Fun(ty, P.Fun(joinTy, P.ForallTy("$" + varId + "Delta", P.Fun(isoTy, pBodyTy)))))
                 return KProper(pTy,None,None,false,noRange)
         }
-    | Partial(tyContents, rng) ->
+    | Exception(tyContents, rng) ->
         check {
             let! k = withError errorMsg rng (kSynth tenv tyContents)
             let! resTy, _, optSemi,_ = getProper "underlying type" k

@@ -116,7 +116,7 @@ Ty: LPAREN Scalar TyList RPAREN { Capsule($3, $2, parseState.ResultRange) }
   | Ty ASTERISK Ty { Prod($1,$3, parseState.ResultRange) }
   | Ty CARET Ty { LexProd($1, $3, parseState.ResultRange) }
   | PIPE TyList PIPE { IVar($2, parseState.ResultRange) }
-  | LSQUAREBRACKET TyList RSQUAREBRACKET { Partial($2, parseState.ResultRange) }
+  | LSQUAREBRACKET TyList RSQUAREBRACKET { Exceptional($2, parseState.ResultRange) }
   | ID { TyId($1, parseState.ResultRange) }
   | BIGFORALL ForallParList END { $2 }
   | TYPEFUN TypeParList END { $2 }

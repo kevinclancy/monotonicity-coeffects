@@ -444,7 +444,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                             P.Var("!ti"),
                             P.In1(pBodyTy, P.Unit, P.App(P.Abs(varId, pTyContents, pBodyTerm), P.Var("!hi"))),
                             P.Abs("_", pTyContents, P.Abs("_", pIvarTy, P.In2(pBodyTy, P.Unit, P.PrimUnitVal)))))))
-            return Partial(bodyTy, noRange), contr ivarQ (bodyQ.Remove(varId)), resTerm
+            return Exception(bodyTy, noRange), contr ivarQ (bodyQ.Remove(varId)), resTerm
         }
     | Let(varId, bindExpr, bodyExpr, rng) ->
         check {
@@ -455,25 +455,25 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             let resTerm = P.App(P.Abs(varId, pBindTy, pBodyTerm), pBindTerm)
             return bodyTy, contr (comp bodyQ.[varId] bindQ) (bodyQ.Remove(varId)), resTerm
         }
-    | MLet(varId, partialComputationExpr, bodyExpr, rng) ->
+    | MLet(varId, exceptionalComputationExpr, bodyExpr, rng) ->
         check {
-            let! partialCompTy, partialCompQ, pPartialCompTerm =
-                withError errorMsg rng (typeCheck ctxt partialComputationExpr)
+            let! exceptionalCompTy, exceptionalCompQ, pExceptionalCompTerm =
+                withError errorMsg rng (typeCheck ctxt exceptionalComputationExpr)
             let! bindTy = 
-                match Ty.normalize(ctxt.tenv.tyAliasEnv, partialCompTy) with
-                | Partial(bindTy,_) ->
+                match Ty.normalize(ctxt.tenv.tyAliasEnv, exceptionalCompTy) with
+                | Exception(bindTy,_) ->
                     Result bindTy
                 | _ ->
-                    Error [errorMsg + ": monadic let expected a partial computation in body position, but instead got " + partialCompTy.ToString(),rng]
+                    Error [errorMsg + ": monadic let expected a exceptional computation in body position, but instead got " + partialCompTy.ToString(),rng]
             let! pBindTy = kCheckProset ctxt.tenv bindTy
             let venv' = venv.Add(varId, bindTy)
             let! bodyTy, bodyQ, pBodyTerm = withError errorMsg rng (typeCheck { ctxt with venv = venv' } bodyExpr)
             let! contentsTy = 
                 match bodyTy with
-                | Partial(contentsTy, _) ->
+                | Exception(contentsTy, _) ->
                     Result contentsTy
                 | _ ->
-                    Error [errorMsg + ": " + (getSource ctxt bodyExpr) + " expected to be a monotonically partial computation, but has type " + bodyTy.ToString() + " instead.", rng]
+                    Error [errorMsg + ": " + (getSource ctxt bodyExpr) + " expected to be a monotonically exceptional computation, but has type " + bodyTy.ToString() + " instead.", rng]
             let! pContentsTy = kCheckProset ctxt.tenv contentsTy
             do!
                 match Coeffect.LessThan bodyQ.[varId] CoeffectMonotone with
@@ -483,16 +483,16 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
                     Error ["Expected monotone (+) usage of " + varId + " but computed " + bodyQ.[varId].ToString(), rng]
             let pBodyFun = P.Abs(varId, pBindTy, pBodyTerm)
             let resTerm = P.SumCase(
-                            pPartialCompTerm, 
+                            pExceptionalCompTerm, 
                             P.Abs("!l", pBindTy, P.App(pBodyFun, P.Var("!l"))),
                             P.Abs("!r", P.Unit, P.In2(pContentsTy, P.Unit, P.PrimUnitVal)))
-            return bodyTy, contr partialCompQ (bodyQ.Remove(varId)), resTerm
+            return bodyTy, contr exceptionalCompQ (bodyQ.Remove(varId)), resTerm
         }
     | MRet(expr,rng) ->
         check {
             let! exprTy, exprQ, pExprTerm = withError errorMsg rng (typeCheck ctxt expr)
             let! pExprTy = withError errorMsg rng (kCheckProset ctxt.tenv exprTy)
-            return Partial(exprTy, noRange), exprQ, P.In1(pExprTy, P.Unit, pExprTerm)
+            return Exception(exprTy, noRange), exprQ, P.In1(pExprTy, P.Unit, pExprTerm)
         } 
     | CoeffectAscription(assertions, expr, rng) ->
         let checkAssertion (exprQ : CoeffectMap) (q : Coeffect, x : string) =

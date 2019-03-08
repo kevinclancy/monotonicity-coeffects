@@ -118,8 +118,8 @@ type Ty =
   | TyOp of varId : string * kind : ProperKind * body : Ty * pos : (Position * Position)
   /// Universally quantified type
   | ForallTy of varId : string * kind : ProperKind * body : Ty * pos : Range
-  // Monotone partiality monad
-  | Partial of ty : Ty * pos : Range
+  // Monotone exception monad
+  | Exception of ty : Ty * pos : Range
   // Type abstraction application
   | TyApp of op : Ty * arg : Ty * Range
 
@@ -157,8 +157,8 @@ type Ty =
             ForallTy(id,pk,body,rng)
         else
             ForallTy(id,pk,Ty.subst a x body, rng)        
-    | Partial(ty, rng) ->
-        Partial(Ty.subst a x ty, rng)
+    | Exception(ty, rng) ->
+        Exception(Ty.subst a x ty, rng)
     | TyApp(op, arg, rng) ->
         TyApp(Ty.subst a x op, Ty.subst a x arg, rng)
 
@@ -251,7 +251,7 @@ type Ty =
         None
     | ForallTy(varId, kind, body, rng) ->
         None
-    | Partial(tyContents, rng) ->
+    | Exception(tyContents, rng) ->
         None
     | TyApp(tyOp, argTy, rng) ->
         match Ty.reduce aliasEnv tyOp with
@@ -342,7 +342,7 @@ type Ty =
                 Error [errorMsg + ": kind " + aKind.ToString() + " distinct from " + bKind.ToString(), noRange]
         | false ->
             Error [errorMsg + ": bound variable " + aId + " distinct from " + bId, noRange]
-    | Partial(aTy,_), Partial(bTy,_) ->
+    | Exception(aTy,_), Exception(bTy,_) ->
         check {
             let! _ = withError errorMsg noRange (Ty.IsSubtype aliasEnv aTy bTy)
             return ()
@@ -372,7 +372,7 @@ type Ty =
             "(TypeFun (" + varId + " : " + kind.ToString() + "). " + body.ToString() + ")"
         | ForallTy(varId, kind, body,_) ->
             "(Forall (" + varId + " : " + kind.ToString() + "). " + body.ToString() + ")"
-        | Partial(ty,_) ->
+        | Exception(ty,_) ->
             "[" + ty.ToString() + "]"
         | TyApp(forallTy, argTy, rng) ->
             "(" + forallTy.ToString() + " " + argTy.ToString() + ")" 
@@ -603,9 +603,9 @@ let rec toMC (tyAliases : Map<string, Ty>) (t : PCF.Term) (ty : Ty) (tyName : Op
         "|" + toMCIVar tyAliases t ty' + "|"
     | ForallTy(_,_,_,_), _ ->
         "forall"
-    | Partial(ty',_), PCF.In1(_,_,t') ->
+    | Exception(ty',_), PCF.In1(_,_,t') ->
         "[" + toMC tyAliases t' ty' None + "]"
-    | Partial(ty',_), PCF.In2(_,_,_) ->
+    | Exception(ty',_), PCF.In2(_,_,_) ->
         "error"
     | TyApp(forallTy, argTy, rng), t ->
         (toMC tyAliases t (Ty.reduce tyAliases ty).Value (Some(Option.defaultValue (ty.ToString()) tyName)))
