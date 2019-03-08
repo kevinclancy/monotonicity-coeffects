@@ -64,9 +64,9 @@ and swap =
     end
 
 in
-	let co = | ((4,6), 1337) | 
-	and actions = { (4, (swap (add 40))) -> known , (5, (remove 50)) -> known, (6, (add 20)) -> known : (ActionId*Action) |> Prop }
-	and ic = (isComplete (co, actions))
+    let co = | ((4,6), 1337) | 
+    and actions = { (4, (swap (add 40))) -> known , (5, (remove 50)) -> known, (6, (add 20)) -> known : (ActionId*Action) |> Prop }
+    and ic = (isComplete (co, actions))
     and [ x ] <- ic  
     and [ y ] <- ic
     in [ (monoIf !Prop !Nat x (plus 3 4)) ]
