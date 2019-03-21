@@ -589,6 +589,8 @@ let rec toMC (tyAliases : Map<string, Ty>) (t : PCF.Term) (ty : Ty) (tyName : Op
         "function"
     | Dictionary(dom,cod,_), PCF.Cons(hd, rest) ->
         "{" + toMCDictionary tyAliases t dom cod + " : " + Option.defaultValue (ty.ToString()) tyName + "}" 
+    | Dictionary(dom,cod,_), PCF.EmptyList(_) ->
+        "(bot " +  Option.defaultValue (ty.ToString()) tyName + ")"
     | Capsule(ty',_,_), _ ->
         toMC tyAliases t ty' None
     | Prod(tyL, tyR, _), PCF.Pair(t1, t2) ->

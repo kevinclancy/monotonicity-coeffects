@@ -229,7 +229,7 @@ let baseTyMap =
          ("Prop", KProper(
                     P.Sum(P.Unit, P.Unit),
                     Some(primLessProp),
-                    Some{bot = In1(P.Unit, P.Unit, P.PrimUnitVal); join = primJoinProp ; tyDelta = TyId("Unit", noRange) ; iso = primIsoProp},
+                    Some{bot = In2(P.Unit, P.Unit, P.PrimUnitVal); join = primJoinProp ; tyDelta = TyId("Unit", noRange) ; iso = primIsoProp},
                     true,
                     noRange)) ;
 

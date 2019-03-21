@@ -79,7 +79,7 @@ Expr: INT                       { Int($1, parseState.ResultRange) }
 	| CONST { Const($1, parseState.ResultRange) }
 	| ID { Var($1, parseState.ResultRange) }
 	| LPAREN BOT TyList RPAREN { Bot($3, parseState.ResultRange) }
-	| JOIN Ty Expr Expr { Join($2, $3, $4, parseState.ResultRange) }
+	| LPAREN JOIN Ty Expr Expr RPAREN { Join($3, $4, $5, parseState.ResultRange) }
 	| LPAREN Expr LESSTHAN Expr RPAREN { LessThan($2,$4,parseState.ResultRange) }
 	| CONS Expr Expr Expr { Cons($2, $3, $4, parseState.ResultRange) }
 	| FST Expr { Fst($2, parseState.ResultRange) }
