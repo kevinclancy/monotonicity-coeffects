@@ -1,0 +1,70 @@
+﻿
+
+types
+  Set = typefun (x : TOSET) x |> Prop end;
+
+  // The two-phase set
+  TSet = typefun (x : TOSET) (Set x) * (Set x) end; 
+in
+
+let equal =
+
+	fun (A : TOSET) (x : A) (y : A)
+		(bAnd 
+		  (bNot (x < y)) 
+		  (bNot (y < x)))
+	end
+
+and whenTrue = 
+
+  fun (dest : SEMILATTICE) (cond : Prop) (res : dest)
+      let extract to dest with k v acc = { unit -> cond : Unit |> Prop } in
+		res
+      end
+  end
+
+and lookup = 
+
+  fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K) @(+ d)
+    let extract to V with k2 v acc = d
+    in 
+        case (equal !K k k2) to V of
+        inl x -> v
+        inr x -> (bot V)
+    end
+  end
+
+////////////////// *********** 2P-Set methods (excluding built-in semilattice methods) *******
+
+and tAdd = 
+
+  fun (K : TOSET) (s : TSet K) (k : K) @(+ s)
+    (join (TSet K) s ({ k -> known : Set K }, (bot (Set K))))
+  end
+
+and tRemove =
+
+  fun (K : TOSET) (s : TSet K) (k : K) @(+ s)
+    (join (TSet K) s ((bot (Set K)), { k -> known : Set K }))
+  end
+
+and tLookup =
+
+  //note that this method is non-monotone: replacing @(? s) with @(+ s) produces an error
+  fun (K : TOSET) (s : TSet K) (k : K) @(? s)
+    let addSet = fst s
+    and remSet = snd s
+    in (pAnd (lookup !K !Prop addSet k) (pNot (lookup !K !Prop remSet k)))
+    end
+  end
+
+in 
+   let a = (bot (TSet Nat)) 
+   and b = (tAdd !Nat a 3)
+   and c = (tRemove !Nat b 3)
+   and d = (tAdd !Nat c 3)
+   in { 1 -> (tLookup !Nat a 3), 2 -> (tLookup !Nat b 3), 3 -> (tLookup !Nat c 3), 4 -> (tLookup !Nat d 3)
+        : Nat |> Prop }
+   end
+end
+
