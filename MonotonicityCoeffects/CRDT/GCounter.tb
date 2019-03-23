@@ -1,0 +1,58 @@
+﻿types
+   GCounter = Nat |> Nat;
+in
+
+let equal =
+
+	fun (A : TOSET) (x : A) (y : A)
+		(bAnd 
+		  (bNot (x < y)) 
+		  (bNot (y < x)))
+	end
+
+and whenTrue = 
+
+  fun (dest : SEMILATTICE) (cond : Prop) (res : dest)
+      let extract to dest with k v acc = { unit -> cond : Unit |> Prop } in
+		res
+      end
+  end
+
+and lookup = 
+
+  fun (c : GCounter) (k : Nat) @(+ c)
+    let extract to Nat with k2 v acc = c
+    in 
+        case (equal !Nat k k2) to Nat of
+        inl x -> v
+        inr x -> 0
+    end
+  end
+
+////////////////// *********** GCounter methods (excluding built-in semilattice methods) *******
+
+and mIncrement = 
+
+  fun (c : GCounter) (processId : Nat) @(+ c)
+    (join GCounter c { processId -> (plus (lookup c processId) 1) : GCounter })
+  end
+
+and mValue =
+
+  fun (d : GCounter) @(+ d)
+    let extract to Nat with k v acc = d 
+    in (plus acc v)
+    end
+  end
+
+in 
+  
+  let a = (bot GCounter)
+  and b = (mIncrement a 0)
+  and c = (mIncrement b 1)
+  and d = (mIncrement c 0)
+  // output: 3
+  in (mValue d)
+  end
+
+end

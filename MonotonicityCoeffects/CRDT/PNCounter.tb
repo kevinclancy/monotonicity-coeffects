@@ -1,0 +1,82 @@
+﻿types
+   // First component maps each process id to its number of increments
+   // Second component maps each process id to its number of decrements
+   PNCounter = (Nat |> Nat) * (Nat |> Nat);
+in
+
+let equal =
+
+	fun (A : TOSET) (x : A) (y : A)
+		(bAnd 
+		  (bNot (x < y)) 
+		  (bNot (y < x)))
+	end
+
+and whenTrue = 
+
+  fun (dest : SEMILATTICE) (cond : Prop) (res : dest)
+      let extract to dest with k v acc = { unit -> cond : Unit |> Prop } in
+		res
+      end
+  end
+
+and lookup = 
+
+  fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K) @(+ d)
+    let extract to V with k2 v acc = d
+    in 
+        case (equal !K k k2) to V of
+        inl x -> v
+        inr x -> (bot V)
+    end
+  end
+
+////////////////// *********** GCounter methods (excluding built-in semilattice methods) *******
+
+and mIncrement = 
+
+  fun (c : PNCounter) (processId : Nat) @(+ c)
+    let incs = fst c
+    and decs = snd c
+    and newIncs = (join (Nat |> Nat) incs { processId -> (plus (lookup !Nat !Nat incs processId) 1) : Nat |> Nat})
+    in (newIncs, decs)
+    end 
+  end
+
+and mDecrement = 
+
+  fun (c : PNCounter) (processId : Nat) @(+ c)
+    let incs = fst c
+    and decs = snd c
+    and newDecs = (join (Nat |> Nat) decs { processId -> (plus (lookup !Nat !Nat decs processId) 1) : Nat |> Nat})
+    in (incs, newDecs)
+    end 
+  end
+
+and mValue = 
+
+  fun (c : PNCounter) @(? c)
+    let pos =
+      let extract to Nat with k v acc = fst c 
+      in (plus acc v)
+      end
+    and neg =
+      let extract to Nat with k v acc = snd c 
+      in (plus acc v)
+      end
+    in 
+      (minus pos neg)
+    end
+  end
+
+in 
+  
+  let a = (bot PNCounter)
+  and b = (mIncrement a 0)
+  and c = (mIncrement b 1)
+  and d = (mDecrement c 1)
+  // output: 1
+  in (mValue d)
+  end
+
+end

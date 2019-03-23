@@ -1,6 +1,4 @@
-﻿
-
-types
+﻿types
   Set = typefun (x : TOSET) x |> Prop end;
 
   // The two-phase set
@@ -36,19 +34,19 @@ and lookup =
 
 ////////////////// *********** 2P-Set methods (excluding built-in semilattice methods) *******
 
-and tAdd = 
+and mAdd = 
 
   fun (K : TOSET) (s : TSet K) (k : K) @(+ s)
     (join (TSet K) s ({ k -> known : Set K }, (bot (Set K))))
   end
 
-and tRemove =
+and mRemove =
 
   fun (K : TOSET) (s : TSet K) (k : K) @(+ s)
     (join (TSet K) s ((bot (Set K)), { k -> known : Set K }))
   end
 
-and tLookup =
+and mLookup =
 
   //note that this method is non-monotone: replacing @(? s) with @(+ s) produces an error
   fun (K : TOSET) (s : TSet K) (k : K) @(? s)
@@ -60,10 +58,11 @@ and tLookup =
 
 in 
    let a = (bot (TSet Nat)) 
-   and b = (tAdd !Nat a 3)
-   and c = (tRemove !Nat b 3)
-   and d = (tAdd !Nat c 3)
-   in { 1 -> (tLookup !Nat a 3), 2 -> (tLookup !Nat b 3), 3 -> (tLookup !Nat c 3), 4 -> (tLookup !Nat d 3)
+   and b = (mAdd !Nat a 3)
+   and c = (mRemove !Nat b 3)
+   and d = (mAdd !Nat c 3)
+   // output:  {2 -> known : (Nat |> Prop)}
+   in { 1 -> (mLookup !Nat a 3), 2 -> (mLookup !Nat b 3), 3 -> (mLookup !Nat c 3), 4 -> (mLookup !Nat d 3)
         : Nat |> Prop }
    end
 end
