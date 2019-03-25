@@ -11,58 +11,41 @@ let equal =
 		  (bNot (y < x)))
 	end
 
-and whenTrue = 
+and mContains = 
 
-  fun (dest : SEMILATTICE) (cond : Prop) (res : dest)
-      let extract to dest with k v acc = { unit -> cond : Unit |> Prop } in
-		res
+  fun (n : Nat) 
+    hom (s : LPSet . (?Nat) * Unit) 
+      let cap ? n2 = fst s
+      in
+        case (equal !Nat n n2) to Prop of
+        inl x -> known
+        inr x -> unknown
       end
-  end
-
-
-and lookup = 
-
-  fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K) @(+ d)
-    let extract to V with k2 v acc = d
-    in 
-        case (equal !K k k2) to V of
-        inl x -> v
-        inr x -> (bot V)
     end
   end
 
-and intersect =
+and mIntersect =
 
     fun (x : LPSet) 
         hom (y : LPSet . (?Nat) * Unit)
             let cap ? n = fst y
-            in {n -> (lookup !Nat !Prop x n) : LPSet}
+            in {n -> (mContains n x) : LPSet }
             end
         end
     end
 
 // isn't this more of a select?
-and project =
+and mProject =
     
     fun (p : Nat ->+ Prop)
         hom (d : LPSet . (?Nat) * Unit)
             let cap ? n = fst d
-            in { n -> (p n ) : LPSet }
+            in { n -> (p n) : LPSet }
             end
         end
     end
 
-// note that product would not make sense for lpset (unless we're talking about the divisibility semilattice)
-
-and sum =
-
-    fun (x : LPSet) @(+ x)
-        let extract to Nat with n v acc = x
-        in (plus n acc)
-        end
-    end
-
-and size = 
+and mSize = 
 
     fun (x : LPSet) @(+ x)
         let extract to Nat with n v acc = x
@@ -70,10 +53,18 @@ and size =
         end
     end
 
-in 
-    (size { 1 -> known, 2 -> known, 3 -> known : LPSet })
-    //(project (fun (n : Nat) (geq n 2) end) { 1 -> known, 0 -> known, 10 -> known : LPSet })
+// note that product would not make sense for lpset (unless we're talking about the divisibility semilattice)
 
-    //(intersect { 1 -> known, 2 -> known : LPSet } { 1 -> known, 3 -> known : LPSet})
+and mSum =
+
+    fun (x : LPSet) @(+ x)
+        let extract to Nat with n v acc = x
+        in (plus n acc)
+        end
+    end
+
+in 
+    // Output: 6
+    (mSum { 1 -> known, 2 -> known, 3 -> known : LPSet })
 end
 

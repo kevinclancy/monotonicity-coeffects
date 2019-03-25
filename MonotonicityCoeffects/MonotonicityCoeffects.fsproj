@@ -15,15 +15,21 @@
     <Compile Include="Parser.fs" />
     <Compile Include="Lexer.fs" />
     <Compile Include="Program.fs" />
+    <None Include="CRDT\PNCounter.tb" />
+    <None Include="CRDT\GCounter.tb" />
+    <None Include="CRDT\2PSet.tb" />
     
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="BloomAPI\LMap.tb" />
+    <None Include="BloomAPI\LBool.tb" />
+    <None Include="BloomAPI\LMin.tb" />
     <None Include="BloomAPI\LMax.tb" />
     <None Include="BloomAPI\LSet.tb" />
     <None Include="BloomAPI\LPSet.tb" />
-    <None Include="BloomAPI\Bag.tb" />
+    <None Include="BloomAPI\LBag.tb" />
+    <None Include="BloomAPI\LMap.tb" />
+    <None Include="Unicorn.tb" />
     <None Include="WeightedGraph.tb" />
     <None Include="Lexer.fsl" />
     <None Include="Datafun.tb" />

@@ -365,6 +365,45 @@ let leq (t1 : P.Term) : P.Term =
 
 let primLeq = P.PrimFun("leq", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.pBoolTy), leq)
 
+
+let leqU (t1 : P.Term) : P.Term =
+    match t1 with
+    | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(n)) ->
+        let leq' (t2 : P.Term) =
+            match t2 with
+            | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(m)) ->
+                makePcfBool (n <= m)
+            | P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
+                pcfTrue
+            | _ ->
+                failwith goneWrong
+        P.PrimFun("leqU", P.Sum(P.Prim("Nat"), P.Unit), P.pBoolTy, leq')
+    | P.In1(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
+        pcfFalse 
+    | _ ->
+        failwith goneWrong
+
+let primLeqU = P.PrimFun("leqU", P.Sum(P.Prim("Nat"),P.Unit), P.Fun(P.Sum(P.Prim("Nat"),P.Unit), P.pBoolTy), leqU)
+
+let ltU (t1 : P.Term) : P.Term =
+    match t1 with
+    | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(n)) ->
+        let leq' (t2 : P.Term) =
+            match t2 with
+            | P.In1(P.Prim("Nat"), P.Unit, P.PrimNatVal(m)) ->
+                makePcfBool (n < m)
+            | P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
+                pcfTrue
+            | _ ->
+                failwith goneWrong
+        P.PrimFun("ltU'", P.Sum(P.Prim("Nat"), P.Unit), P.pBoolTy, leq')
+    | P.In1(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ->
+        pcfFalse 
+    | _ ->
+        failwith goneWrong
+
+let primLtU = P.PrimFun("lt", P.Sum(P.Prim("Nat"),P.Unit), P.Fun(P.Sum(P.Prim("Nat"),P.Unit), P.pBoolTy), ltU)
+
 let geq (t1 : P.Term) : P.Term =
     match t1 with
     | P.PrimNatVal(n) ->
@@ -379,6 +418,7 @@ let geq (t1 : P.Term) : P.Term =
         failwith goneWrong
 
 let primGeq = P.PrimFun("geq", P.Prim("Nat"), P.Fun(P.Prim("Nat"), P.pBoolTy), geq)
+let primGeqU = P.PrimFun("geqU", P.Prim("NatU"), P.Fun(P.Prim("NatU"), P.pBoolTy), geq)
 
 let gt (t1 : P.Term) : P.Term =
     match t1 with
@@ -463,6 +503,10 @@ let baseVEnv =
          ("flip", (FunTy(TyId("Nat",noRange), CoeffectAntitone, TyId("NatU", noRange), noRange), primFlip))
          ("plusU", (FunTy(TyId("NatU",noRange), CoeffectMonotone, FunTy(TyId("NatU",noRange), CoeffectMonotone, TyId("NatU", noRange), noRange), noRange), 
                    primPlusU))
+         ("ltU", (FunTy(TyId("NatU",noRange), CoeffectMonotone, FunTy(TyId("NatU",noRange), CoeffectAntitone, TyId("Prop", noRange), noRange), noRange),
+                  primLtU))
+         ("leqU", (FunTy(TyId("NatU",noRange), CoeffectMonotone, FunTy(TyId("NatU",noRange), CoeffectAntitone, TyId("Prop", noRange), noRange), noRange),
+                  primLeqU))
          //("eq", (FunTy(TyId("Nat",noRange), CoeffectAny, FunTy(TyId("Nat",noRange), CoeffectAny, TyId("Bool", noRange), noRange), noRange))
         // TODO: we need primitive unit values in syntax
          ("unit", (TyId("Unit", noRange),

@@ -7,14 +7,28 @@ in
 // amost all of BloomL's lmax methods are not homomorphic by our definition, since we require preservation
 // of bottom.
 
-let LMaxGreaterThan =
-
+let mGt =
+    // takes two arguments and is homomorphic in the first: expressing this is a bit awkward, since the codomain
+    // of a hom abstraction must be a datatype and not a function type.
     fun (n : Nat) (m : Nat)
         ((hom (n : Nat . Nat)
             (gt n m)
         end) n)
     end
+and mGtEq =
+
+    // takes two arguments and is homomorphic in the first: expressing this is a bit awkward, since the codomain
+    // of a hom abstraction must be a datatype and not a function type.
+    fun (n : Nat) (m : Nat)
+        ((hom (n : Nat . Nat)
+            (geq n m)
+        end) n)
+    end
+
+// + and - do not preserve bottom, and so we cannot implement them as homomorphisms.
+// Conway et al. use a different notion of homomorphism (or "morphism") which requires
+// only the preservation of binary joins, not nullary ones
 
 in
-    (LMaxGreaterThan 0 1)
+  3
 end
