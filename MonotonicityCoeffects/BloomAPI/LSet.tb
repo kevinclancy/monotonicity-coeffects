@@ -36,16 +36,13 @@ and mIntersect =
 // seems like "map" would be a more appropriate name
 and mProject =
     
-    fun (ElemTy : TOSET) (ResElemTy : TOSET) (p : ElemTy ->? (?ResElemTy) + Unit)
+    fun (ElemTy : TOSET) (ResElemTy : TOSET) (p : ElemTy ->? ResElemTy + Unit)
         hom (d : LSet ElemTy . (?ElemTy) * Unit)
             let cap ? e = fst d
             in
                 case (p e) to LSet ResElemTy of
                 // include (p e)
-                inl x -> 
-                  let cap ? v = x
-                  in { v -> known : LSet ResElemTy }
-                  end
+                inl x -> { x -> known : LSet ResElemTy }
                 // exclude
                 inr x -> (bot (LSet ResElemTy))
             end
@@ -81,9 +78,9 @@ in
     // output:
     let f =
       fun (x : Nat)
-        case (equal !Nat x 1) to ((?Nat) + Unit) of
-        inl x -> (inr (?Nat) Unit unit)
-        inr y -> (inl (?Nat) Unit (cap ? (mult 2 x)))
+        case (equal !Nat x 1) to (Nat + Unit) of
+        inl x -> (inr Nat Unit unit)
+        inr y -> (inl Nat Unit (mult 2 x))
       end
     in
       (mProject !Nat !Nat f { 1 -> known, 2 -> known, 3 -> known : LSet Nat})
