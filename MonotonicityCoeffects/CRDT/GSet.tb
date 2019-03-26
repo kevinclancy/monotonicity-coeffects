@@ -1,0 +1,49 @@
+types
+   GSet = typefun (T : TOSET) T |> Prop end;
+in
+
+let equal =
+
+  fun (A : TOSET) (x : A) (y : A)
+    (bAnd 
+      (bNot (x < y)) 
+      (bNot (y < x)))
+  end
+
+and whenKnown = 
+
+  fun (dest : SEMILATTICE) (prop : Prop) (res : dest)
+    let extract to dest with k v acc = { unit -> prop : Unit |> Prop } in
+      res
+    end
+  end
+
+
+
+////////////////// *********** GCounter methods (excluding built-in semilattice methods) *******
+
+and mLookup = 
+
+  fun (E : TOSET) (c : GSet E) (e : E) @(+ c)
+    let extract to Prop with e2 v acc = c
+    in 
+      case (equal !E e e2) to Prop of
+      inl x -> known
+      inr x -> unknown
+    end
+  end
+
+and mAdd =
+
+  fun (E : TOSET) (c : GSet E) (e : E) @(+ c)
+    (join (GSet E) c { e -> known : GSet E})
+  end
+
+in 
+  let a = (bot (GSet Nat))
+  and b = (mAdd !Nat a 2)
+  and c = (mAdd !Nat a 3)
+  // output: unknown
+  in (mLookup !Nat c 4)
+  end
+end
