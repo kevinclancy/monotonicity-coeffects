@@ -11,17 +11,28 @@ let equal =
 		  (bNot (y < x)))
 	end
 
-and whenTrue = 
+and propEqual =
 
-  fun (dest : SEMILATTICE) (cond : Prop) (res : dest)
-      let extract to dest with k v acc = { unit -> cond : Unit |> Prop } in
+  fun (A : TOSET) (x : A) (y : A)
+    case (equal !A x y) to Prop of
+    inl z -> known
+    inr z -> unknown
+  end
+
+and whenNonBot = 
+
+  fun (DestTy : SEMILATTICE) (ScrutTy : SEMILATTICE) (scrut : ScrutTy) (res : DestTy)
+      let extract to DestTy with k v acc = { unit -> scrut : Unit |> ScrutTy } in
 		res
       end
   end
 
-and lookup = 
+///////////////////////////////////////////////////////////// lmap //////////////////////////////////////////////////////////////
 
-  fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K) @(+ d)
+
+and mAt = 
+
+  fun (K : TOSET) (V : SEMILATTICE) (d : LMap K V) (k : K) @(+ d)
     let extract to V with k2 v acc = d
     in 
         case (equal !K k k2) to V of
@@ -30,7 +41,7 @@ and lookup =
     end
   end
 
-and keySet =
+and mKeySet =
 
     fun (K : TOSET) (V : SEMILATTICE) 
         hom (kv : LMap K V . (?K) * VDelta)
@@ -40,6 +51,49 @@ and keySet =
         end
     end
 
+// and mIntersect =
+
+  // here is a function that does not currently work: we have not given the programmer access to f,g,or the unit of the adjunction
+  // for the semilattice type V, hence we cannot join vdelta into the result
+  //
+  // fun (K : TOSET) (V : SEMILATTICE) (other : LMap K V) 
+  //  hom (self : LMap K V . (? K) * VDelta)
+  //    let cap ? kself = fst self 
+  //    and vself = snd self
+  //    and vother = (mAt !K !V other kself)
+  //    in (whenNonBot !V !V vother (join V vother vself)) //vself here as the wrong type: we need unit of adjunction
+  //    end
+  //  end
+  //end
+
+and mHasKey =
+
+  fun (K : TOSET) (V : SEMILATTICE) (k : K)
+    hom (self : LMap K V . (?K) * VDelta)
+        let cap ? kself = fst self 
+        in (propEqual !K k kself)
+        end
+    end
+  end
+
+and mSize =
+
+  fun (K : TOSET) (V : SEMILATTICE) (self : LMap K V)
+    let extract to Nat with k v acc = self
+    in (plus acc 1)
+    end
+  end
+
+// The BloomL implementation did not provide 
+and mApplyMonotone =
+
+  fun (K : TOSET) (V : SEMILATTICE) (fn : V ->+ V) (self : LMap K V) @(+ self)
+    let extract to LMap K V with k v acc = self
+    in { k -> (fn v) : LMap K V }
+    end
+  end
+
 in
-  (keySet !Nat !Nat {1 -> 2 , 43 -> 7 : LMap Nat Nat})
+  // output: { 1 -> 4, 3 -> 8 : (LMap Nat Nat) }
+  (mApplyMonotone !Nat !Nat (fun (n : Nat) (mult n 2) end) { 1 -> 2, 3 -> 4 : (LMap Nat Nat) })
 end

@@ -34,7 +34,6 @@ and mIntersect =
         end
     end
 
-// isn't this more of a select?
 and mProject =
     
     fun (p : Nat ->+ Prop)
