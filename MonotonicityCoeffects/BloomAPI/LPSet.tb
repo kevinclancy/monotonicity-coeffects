@@ -5,11 +5,11 @@ in
 
 let equal =
 
-	fun (A : TOSET) (x : A) (y : A)
-		(bAnd 
-		  (bNot (x < y)) 
-		  (bNot (y < x)))
-	end
+  fun (A : TOSET) (x : A) (y : A)
+    (bAnd 
+      (bNot (x < y)) 
+      (bNot (y < x)))
+  end
 
 and mContains = 
 
@@ -26,44 +26,44 @@ and mContains =
 
 and mIntersect =
 
-    fun (x : LPSet) 
-        hom (y : LPSet . (?Nat) * Unit)
-            let cap ? n = fst y
-            in {n -> (mContains n x) : LPSet }
-            end
-        end
+  fun (x : LPSet) 
+    hom (y : LPSet . (?Nat) * Unit)
+      let cap ? n = fst y
+      in {n -> (mContains n x) : LPSet }
+      end
     end
+  end
 
 and mProject =
     
-    fun (p : Nat ->+ Prop)
-        hom (d : LPSet . (?Nat) * Unit)
-            let cap ? n = fst d
-            in { n -> (p n) : LPSet }
-            end
-        end
+  fun (p : Nat ->+ Prop)
+    hom (d : LPSet . (?Nat) * Unit)
+      let cap ? n = fst d
+      in { n -> (p n) : LPSet }
+      end
     end
+  end
 
 and mSize = 
 
-    fun (x : LPSet) @(+ x)
-        let extract to Nat with n v acc = x
-        in (plus 1 acc)
-        end
+  fun (x : LPSet) @(+ x)
+    let extract to Nat with n v acc = x
+    in (plus 1 acc)
     end
+  end
 
 // note that product would not make sense for lpset (unless we're talking about the divisibility semilattice)
 
 and mSum =
 
-    fun (x : LPSet) @(+ x)
-        let extract to Nat with n v acc = x
-        in (plus n acc)
-        end
+  fun (x : LPSet) @(+ x)
+    let extract to Nat with n v acc = x
+    in (plus n acc)
     end
+  end
 
 in 
-    // Output: 6
-    (mSum { 1 -> known, 2 -> known, 3 -> known : LPSet })
+  // Output: 6
+  (mSum { 1 -> known, 2 -> known, 3 -> known : LPSet })
 end
 

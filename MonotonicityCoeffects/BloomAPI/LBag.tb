@@ -1,0 +1,103 @@
+﻿types
+  LBag = typefun (x : TOSET) x |> Nat end;
+in
+
+let equal =
+
+  fun (A : TOSET) (x : A) (y : A)
+    (bAnd 
+      (bNot (x < y)) 
+      (bNot (y < x)))
+  end
+
+and whenKnown = 
+
+  fun (dest : SEMILATTICE) (prop : Prop) (res : dest)
+    let extract to dest with k v acc = { unit -> prop : Unit |> Prop } in
+      res
+    end
+  end
+
+///////////////////////////////////////////////////////////// lbag //////////////////////////////////////////////////////////////
+
+and mCard =
+
+  fun (ElemTy : TOSET) (eLookup : ElemTy)
+    hom (self : LBag ElemTy . (? ElemTy) * Nat)
+      let cap ? e = fst self
+      and m = snd self
+      in  
+        case (equal !ElemTy e eLookup) to Nat of 
+        inl x -> m
+        inr x -> 0
+      end
+    end
+  end
+
+and mIntersect =
+
+  fun (ElemTy : TOSET) (x : LBag ElemTy) 
+    hom (self : LBag ElemTy . (?ElemTy) * Nat)
+      let cap ? elem = fst self
+      and m = snd self
+      in { elem -> (min (mCard !ElemTy elem x) m) : (LBag ElemTy) }
+      end
+    end
+  end
+
+// the BloomL github repository does not implement a function call project, despite what the
+// paper says
+and mProject =
+
+  // project is kind of pointless in the setting of LambdaMC:
+  // it's just a wrapper around hom
+  fun (SrcElemTy : TOSET) (DestTy : SEMILATTICE) (fn : ((?SrcElemTy)*Nat) ->+ DestTy)
+    hom (b : Bag SrcElemTy . (?SrcElemTy)*Nat)
+      (fn b)
+    end
+  end
+
+// the "+" operator of the BloomL API
+and mPlus =
+
+  fun (ElemTy : TOSET) (other : LBag ElemTy)
+    hom (self : LBag ElemTy . (?ElemTy)*Nat)
+      let cap ? e = fst self
+      and n = snd self 
+      in { e -> (plus (mCard !ElemTy e other) n) : LBag ElemTy }
+      end
+    end
+  end
+
+and mContains =
+
+  fun (ElemTy : TOSET) (eCheck : ElemTy)
+    hom (self : LBag ElemTy . (?ElemTy)*Nat)
+      let cap ? e = fst self 
+      in 
+        case (equal !ElemTy e eCheck) to Prop of
+        inl x -> known
+        inr x -> unknown
+      end
+    end
+  end
+
+and mSize =
+  fun (ElemTy : TOSET) (self : LBag ElemTy) @(+ self)
+    let extract to Nat with k v acc = self in
+      (plus acc v)
+    end
+  end
+
+///////////////////////////////////////////////////////////// lpset //////////////////////////////////////////////////////////////
+
+in 
+  //output: { 2 -> 3 : (LBag Nat) }
+  (mProject !Nat 
+            (fun (k : Nat) 
+               case (equal !Nat k 2) to Prop of
+               inl x -> known
+               inr x -> unknown
+               end)
+            { 1 -> 1, 2 -> 3 : (LBag Nat) })
+end

@@ -7,18 +7,18 @@ in
 
 let equal =
 
-	fun (A : TOSET) (x : A) (y : A)
-		(bAnd 
-		  (bNot (x < y)) 
-		  (bNot (y < x)))
-	end
+  fun (A : TOSET) (x : A) (y : A)
+    (bAnd 
+      (bNot (x < y)) 
+      (bNot (y < x)))
+  end
 
 and whenTrue = 
 
   fun (dest : SEMILATTICE) (cond : Prop) (res : dest)
-      let extract to dest with k v acc = { unit -> cond : Unit |> Prop } in
-		res
-      end
+    let extract to dest with k v acc = { unit -> cond : Unit |> Prop } in
+      res
+    end
   end
 
 and lookup = 
@@ -26,9 +26,9 @@ and lookup =
   fun (K : TOSET) (V : SEMILATTICE) (d : K |> V) (k : K) @(+ d)
     let extract to V with k2 v acc = d
     in 
-        case (equal !K k k2) to V of
-        inl x -> v
-        inr x -> (bot V)
+      case (equal !K k k2) to V of
+      inl x -> v
+      inr x -> (bot V)
     end
   end
 
