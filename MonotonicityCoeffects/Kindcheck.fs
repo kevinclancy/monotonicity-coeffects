@@ -40,8 +40,8 @@ type Range = Position * Position
     | Failure of stack : List<string*Range>
 
  let makeDictionarySemilat (pDomTy : P.Ty) (pCodTy : P.Ty) (domTy : Ast.Ty) (codDeltaTy : Ast.Ty) (pDomComp : P.Term) (jCod : P.Term)
-                           (pCodDeltaTy : P.Ty) (pCodIso : P.Term)
-                           : P.Ty * P.Term * P.Term * Ast.Ty * P.Term =
+                           (pCodDeltaTy : P.Ty) (pCodIso : P.Term) (pPromCod : P.Term)
+                           : P.Ty * P.Term * P.Term * Ast.Ty * P.Term * P.Term =
 
     let resTy = P.List (P.Prod(pDomTy, pCodTy))
     let elemTy = P.Prod(pDomTy, pCodTy)
@@ -77,11 +77,15 @@ type Range = Position * Position
                     P.App(P.App(P.App(pairWithList, P.Proj1(P.Var("!h"))), 
                                 P.App(P.Var("!f"), P.Var("!t"))),
                           P.App(pCodIso, P.Proj2(P.Var("!h"))))))))
-    resTy, bot, join, (Ast.Prod(Ast.Capsule(domTy, CoeffectAny, noRange), codDeltaTy, noRange)), resIso
+
+    let resProm =
+      P.Abs("!d", pDeltaTy, P.Cons(P.Pair(P.Proj1(V("!d")), P.App(pPromCod, P.Proj2(V("!d")))), P.EmptyList(elemTy)))
+
+    resTy, bot, join, (Ast.Prod(Ast.Capsule(domTy, CoeffectAny, noRange), codDeltaTy, noRange)), resIso, resProm
 
 let makeProdSemilat (pTyL : P.Ty) (pTyR : P.Ty) (bL : P.Term) (bR : P.Term) 
                     (jL : P.Term) (jR : P.Term) (deltaTyL : Ast.Ty) (deltaTyR : Ast.Ty) (pDeltaL : P.Ty) (pDeltaR : P.Ty)
-                    (pIsoL : P.Term) (pIsoR : P.Term) : P.Ty * P.Term * P.Term * Ast.Ty * P.Term =
+                    (pIsoL : P.Term) (pIsoR : P.Term) (pPromL : P.Term) (pPromR : P.Term) : P.Ty * P.Term * P.Term * Ast.Ty * P.Term * P.Term =
 
     let resTy = P.Prod(pTyL, pTyR)
     let resBot = P.Pair(bL, bR)
@@ -92,19 +96,25 @@ let makeProdSemilat (pTyL : P.Ty) (pTyR : P.Ty) (bL : P.Term) (bR : P.Term)
     let deltasL = P.App(pIsoL, P.Proj1(P.Var("!p")))
     let deltasR = P.App(pIsoR, P.Proj2(P.Var("!p")))
 
+    let pProm =
+        P.Abs("!d", pDeltaTy, 
+            P.SumCase(V("!d"), 
+                P.Abs("!dl", pDeltaL, P.App(pPromL, V("!dl"))), 
+                P.Abs("!dr", pDeltaR, P.App(pPromR, V("!dr")))))
+
     let pIso = 
         P.Abs("!p", resTy, 
             (append pDeltaTy 
                 (forEach pDeltaL pDeltaTy (P.Abs("!d", pDeltaL, P.In1(pDeltaL, pDeltaR, P.Var("!d")))) deltasL)
                 (forEach pDeltaR pDeltaTy (P.Abs("!d", pDeltaR, P.In2(pDeltaL, pDeltaR, P.Var("!d")))) deltasR)))
-    resTy, resBot, resJoin, (Ast.Sum(deltaTyL, deltaTyR, noRange)), pIso
+    resTy, resBot, resJoin, (Ast.Sum(deltaTyL, deltaTyR, noRange)), pIso, pProm
 
 //****************************** UNDER CONSTRUCTION
 
 
 let makeLexProdSemilat (pTyL : P.Ty) (pTyR : P.Ty) (bL : P.Term) (bR : P.Term) 
                        (compL : P.Term) (jR : P.Term) (deltaTyL : Ast.Ty) (deltaTyR : Ast.Ty) (pDeltaL : P.Ty) (pDeltaR : P.Ty)
-                       (pIsoL : P.Term) (pIsoR : P.Term) : P.Ty * P.Term * P.Term * Ast.Ty * P.Term =
+                       (pIsoL : P.Term) (pIsoR : P.Term) (pPromL : P.Term) (pPromR : P.Term) : P.Ty * P.Term * P.Term * Ast.Ty * P.Term * P.Term =
     
     let resTy = P.Prod(pTyL, pTyR)
     let resBot = P.Pair(bL, bR)
@@ -132,11 +142,14 @@ let makeLexProdSemilat (pTyL : P.Ty) (pTyR : P.Ty) (bL : P.Term) (bR : P.Term)
             P.Abs("!l", pDeltaL, P.Abs("!t", P.List(pDeltaL), 
                 P.App(P.App(P.App(pairWithList, V("!l")), P.EmptyList(P.Prod(pDeltaL, pDeltaR))), deltasR)))))
     
-    resTy, resBot, resJoin, (Ast.LexProd(deltaTyL, deltaTyR, noRange)), pIso
+    let pProm =
+        P.Abs("!d", pDeltaTy, P.Pair(P.App(pPromL, P.Proj1(V("!d"))), P.App(pPromR, P.Proj2(V("!d")))))
+
+    resTy, resBot, resJoin, (Ast.LexProd(deltaTyL, deltaTyR, noRange)), pIso, pProm
 
 //***********************************
 
-let makeIVarSemilat (elemTy : Ast.Ty) (pElemTy : P.Ty) (elemComp : P.Term) : P.Ty * P.Term * P.Term * Ast.Ty * P.Term =
+let makeIVarSemilat (elemTy : Ast.Ty) (pElemTy : P.Ty) (elemComp : P.Term) : P.Ty * P.Term * P.Term * Ast.Ty * P.Term * P.Term =
     let resTy = P.List pElemTy
     let bot = EmptyList(pElemTy) 
     let join = 
@@ -151,10 +164,11 @@ let makeIVarSemilat (elemTy : Ast.Ty) (pElemTy : P.Ty) (elemComp : P.Term) : P.T
                                 P.App(P.App(V("!f"),V("!xt")), V("!yt"))))))))))))
     let deltaTy = Ast.Capsule(elemTy, CoeffectAny, noRange)
     let pIso = P.Abs("!x", resTy, P.Var("!x"))
-    resTy, bot, join, deltaTy, pIso
+    let pProm = P.Abs("!d", pElemTy, P.Cons(V("!d"), P.EmptyList(pElemTy)))
+    resTy, bot, join, deltaTy, pIso, pProm
 
 let makeExceptionSemilat (underlyingTy : Ty) (pTy : P.Ty) (deltaTy : Ty) (pDeltaTy : P.Ty) 
-                       (bot : P.Term) (join : P.Term) (iso : P.Term) : P.Ty * P.Term * P.Term * Ast.Ty * P.Term =
+                         (bot : P.Term) (join : P.Term) (iso : P.Term) (prom : P.Term) : P.Ty * P.Term * P.Term * Ast.Ty * P.Term * P.Term =
     let resTy = P.Sum(pTy, P.Unit)
     let resBot = P.In1(pTy,P.Unit,bot)
     let resJoin =
@@ -174,7 +188,10 @@ let makeExceptionSemilat (underlyingTy : Ty) (pTy : P.Ty) (deltaTy : Ty) (pDelta
             P.SumCase(P.Var("!x"), 
                 P.Abs("!l", pTy, (forEach pDeltaTy pResDeltaTy pMapDelta pDeltasL)),
                 P.Abs("!r", P.Unit, P.Cons(P.In2(pDeltaTy, P.Unit, P.PrimUnitVal), P.EmptyList(P.List(pResDeltaTy))))))
-    resTy, resBot, resJoin, resDeltaTy, resIso
+    let resProm =
+        P.Abs("!d", pResDeltaTy, P.SumCase(V("!d"), prom, P.Abs("!dr", P.Unit, P.PrimUnitVal)))
+    
+    resTy, resBot, resJoin, resDeltaTy, resIso, resProm
 
 let makeProdToset (pTyL : P.Ty) (compL : P.Term) (pTyR : P.Ty) (compR : P.Term)
                   : P.Ty * P.Term =
@@ -367,7 +384,7 @@ and kCheckToset (tenv : TypeEnvironment) (ty : Ty) : Check<SemPoset * SemToset> 
 ///            ty to O_{fin}(tyDelta)
 ///          or, in PCF,
 ///            pTy to (List pTyDelta)
-and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term * P.Term * Ast.Ty * P.Term> =
+and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term * P.Term * Ast.Ty * P.Term * P.Term> =
     let tyVarEnv, tyBaseEnv, tyAliasEnv = tenv.tyVarEnv, tenv.tyBaseEnv, tenv.tyAliasEnv
     let errorMsg = "Type " + ty.ToString() + " is not a semilattice"
     match ty with
@@ -385,11 +402,12 @@ and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term *
                 let join = P.Var("$" + name + "_join")
                 let delta = Ast.TyId(name + "Delta", noRange)
                 let iso = P.Var("$" + name + "_iso")
-                Result (semPoset, bot, join, delta, iso)                
+                let prom = P.Var("$" + name + "_prom")
+                Result (semPoset, bot, join, delta, iso, prom)                
         | None ->
             match tyBaseEnv.TryFind(name) with
-            | Some( KProper(semPoset,_, (Some {bot = bot ; join = join ; tyDelta = tyDelta ; iso = iso}), _, _) ) ->
-                Result (semPoset, bot, join, tyDelta, iso)
+            | Some( KProper(semPoset,_, (Some {bot = bot ; join = join ; tyDelta = tyDelta ; iso = iso ; prom = prom}), _, _) ) ->
+                Result (semPoset, bot, join, tyDelta, iso, prom)
             | Some ( KProper(_,_,_,_,_) ) ->
                 Error [errorMsg, rng]
             | Some ( KOperator(_,_,_) ) ->
@@ -405,31 +423,31 @@ and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term *
     | Dictionary(dom, cod, rng) ->
         check {
             let! (pDomTy, pDomComp) = withError (errorMsg + ": the domain of a dictionary must be a toset") rng (kCheckToset tenv dom)
-            let! (pCodTy, _, jCod, tyDeltaCod, pIsoCod) = withError (errorMsg + ": the codomain of a dictionary must be a semilattice") rng (kCheckSemilattice tenv cod)
+            let! (pCodTy, _, jCod, tyDeltaCod, pIsoCod, pPromCod) = withError (errorMsg + ": the codomain of a dictionary must be a semilattice") rng (kCheckSemilattice tenv cod)
             let! pTyDeltaCod = kCheckProset tenv tyDeltaCod
-            let resTy, bRes, jRes, tyDeltaRes, pIsoRes = makeDictionarySemilat pDomTy pCodTy dom tyDeltaCod pDomComp jCod pTyDeltaCod pIsoCod 
-            return resTy, bRes, jRes, tyDeltaRes, pIsoRes
+            let resTy, bRes, jRes, tyDeltaRes, pIsoRes, pPromRes = makeDictionarySemilat pDomTy pCodTy dom tyDeltaCod pDomComp jCod pTyDeltaCod pIsoCod pPromCod
+            return resTy, bRes, jRes, tyDeltaRes, pIsoRes, pPromRes
         }
     | Capsule(ty,q, rng) ->
         Error [errorMsg + ": capsule types are not considered semilattice types", rng]
     | Prod(tyL,tyR, rng) ->
         check {
-            let! (tyL, bL, jL, deltaL, isoL) = withError (errorMsg + ": left component is not a semilattice type") rng (kCheckSemilattice tenv tyL)
-            let! (tyR, bR, jR, deltaR, isoR) = withError (errorMsg + ": right component is not a semilattice type") rng (kCheckSemilattice tenv tyR)
+            let! (tyL, bL, jL, deltaL, isoL, promL) = withError (errorMsg + ": left component is not a semilattice type") rng (kCheckSemilattice tenv tyL)
+            let! (tyR, bR, jR, deltaR, isoR, promR) = withError (errorMsg + ": right component is not a semilattice type") rng (kCheckSemilattice tenv tyR)
             let! pDeltaL = kCheckProset tenv deltaL
             let! pDeltaR = kCheckProset tenv deltaR
-            let resTy, resBot, resJoin, resDelta, resIso = makeProdSemilat tyL tyR bL bR jL jR deltaL deltaR pDeltaL pDeltaR isoL isoR
-            return resTy, resBot, resJoin, resDelta, resIso
+            let resTy, resBot, resJoin, resDelta, resIso, resProm = makeProdSemilat tyL tyR bL bR jL jR deltaL deltaR pDeltaL pDeltaR isoL isoR promL promR 
+            return resTy, resBot, resJoin, resDelta, resIso, resProm
         }
     | LexProd(tyL, tyR, rng) ->
         check {
             let! compL = withError (errorMsg + ": left type is not a chain") rng (kCheckChain tenv tyL)
-            let! (pTyL, botL, _, deltaL, isoL) = kCheckSemilattice tenv tyL
-            let! (pTyR, botR, joinR, deltaR, isoR) = withError (errorMsg + ": right type is not well-kinded") rng (kCheckSemilattice tenv tyR)
+            let! (pTyL, botL, _, deltaL, isoL, promL) = kCheckSemilattice tenv tyL
+            let! (pTyR, botR, joinR, deltaR, isoR, promR) = withError (errorMsg + ": right type is not well-kinded") rng (kCheckSemilattice tenv tyR)
             let! pDeltaL = kCheckProset tenv deltaL
             let! pDeltaR = kCheckProset tenv deltaR
-            let pTy, bot, join, delta, iso = makeLexProdSemilat pTyL pTyR botL botR compL joinR deltaL deltaR pDeltaL pDeltaR isoL isoR
-            return pTy, bot, join, delta, iso
+            let pTy, bot, join, delta, iso, prom = makeLexProdSemilat pTyL pTyR botL botR compL joinR deltaL deltaR pDeltaL pDeltaR isoL isoR promL promR
+            return pTy, bot, join, delta, iso, prom
         }
     | Sum(_,_,rng) ->
         Error [(errorMsg + ": sum types are not semilattice types",rng)]
@@ -437,8 +455,8 @@ and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term *
         check {
             let! (pElemTy, pElemComp) = 
                 withError (errorMsg + ": the content type of an ivar must be a toset type") rng (kCheckToset tenv elemTy)
-            let resTy, resBot, resJoin, resDelta, resIso = makeIVarSemilat elemTy pElemTy pElemComp
-            return (resTy, resBot, resJoin, resDelta, resIso)
+            let resTy, resBot, resJoin, resDelta, resIso, resProm = makeIVarSemilat elemTy pElemTy pElemComp
+            return (resTy, resBot, resJoin, resDelta, resIso, resProm)
         }    
     | TyOp(_,_,_,rng) ->
         Error [(errorMsg + ": type operators do not denote semilattices", rng)]
@@ -446,11 +464,11 @@ and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term *
         Error [(errorMsg + ": forall types do not denote semilattices",rng)]
     | Exception(elemTy,rng) ->
         check {
-            let! (pElemTy, bot, join, deltaTy, iso) = 
+            let! (pElemTy, bot, join, deltaTy, iso, prom) = 
                 withError (errorMsg + ": [ty] is only a semilattice if ty is a semilattice") rng (kCheckSemilattice tenv elemTy)
             let! pDeltaTy = kCheckProset tenv deltaTy
-            let resTy, resBot, resJoin, resDelta, resIso = makeExceptionSemilat elemTy pElemTy deltaTy pDeltaTy bot join iso
-            return (resTy, resBot, resJoin, resDelta, resIso)
+            let resTy, resBot, resJoin, resDelta, resIso, resProm = makeExceptionSemilat elemTy pElemTy deltaTy pDeltaTy bot join iso prom
+            return (resTy, resBot, resJoin, resDelta, resIso, resProm)
         }
     | TyApp(tyOp, tyArg, rng) ->
         check {
@@ -470,8 +488,8 @@ and kCheckSemilattice (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty * P.Term *
                     Result ()
                 | false -> 
                     Error ["kind " + kArg.ToString() + " of type argument " + tyArg.ToString() + " does not match expected kind " + opDom.ToString(), rng]
-            let! normTy, normBot, normJoin, normDelta, normIso = withError errorMsg rng (kCheckSemilattice tenv (Ty.normalize(tenv.tyAliasEnv, ty)))
-            return (normTy, normBot, normJoin, normDelta, normIso)
+            let! normTy, normBot, normJoin, normDelta, normIso, normProm = withError errorMsg rng (kCheckSemilattice tenv (Ty.normalize(tenv.tyAliasEnv, ty)))
+            return (normTy, normBot, normJoin, normDelta, normIso, normProm)
         }
             
 and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty> =
@@ -503,7 +521,7 @@ and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty> =
     | Dictionary(dom, cod, rng) ->
         check {
             let! pTyDom,_ = withError (errorMsg + ": domain is not a toset") rng (kCheckToset tenv dom)
-            let! pTyCod,_,_,_,_ = withError (errorMsg + ": codomain is not a semilattice") rng (kCheckSemilattice tenv cod)
+            let! pTyCod,_,_,_,_,_ = withError (errorMsg + ": codomain is not a semilattice") rng (kCheckSemilattice tenv cod)
             return P.List(P.Prod(pTyDom,pTyCod))
         }
     | Capsule(tyContents, q, rng) ->
@@ -552,7 +570,8 @@ and kCheckProset (tenv : TypeEnvironment) (ty : Ty) : Check<P.Ty> =
                 let tyDelta = P.TyVar("$" + varId + "Delta")
                 let joinTy = Fun(ty,Fun(ty,ty))
                 let isoTy = Fun(ty, List(tyDelta))
-                return P.ForallTy("$" + varId, P.Fun(ty, P.Fun(joinTy, P.ForallTy("$" + varId + "Delta", P.Fun(isoTy, pBodyTy)))))
+                let promTy = Fun(tyDelta,ty)
+                return P.ForallTy("$" + varId, P.Fun(ty, P.Fun(joinTy, P.ForallTy("$" + varId + "Delta", P.Fun(isoTy, P.Fun(promTy, pBodyTy))))))
         }
     | Exception(tyContents,rng) ->
         check {
@@ -601,7 +620,8 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                 let join = P.Var("$" + name + "_join")
                 let tyDelta = Ast.TyId(name + "Delta", noRange)
                 let iso = P.Var("$" + name + "_iso")
-                Result (KProper(semPoset, None, Some { bot = bot ; join = join ; tyDelta = tyDelta ; iso = iso }, false, noRange))
+                let prom = P.Var("$" + name + "_prom")
+                Result (KProper(semPoset, None, Some { bot = bot ; join = join ; tyDelta = tyDelta ; iso = iso ; prom = prom}, false, noRange))
             | Chain ->
                 let semPoset = P.TyVar("$" + name)
                 let comp = P.Var("$" + name + "_comp")
@@ -638,11 +658,11 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                 | None -> Error ["dictionary domain " + dom.ToString() + " is not a toset type",rng]
             let! res = 
                 match codSemilat with
-                | Some({bot = _ ; join = jCod ; tyDelta = deltaCod ; iso = isoCod }) ->
+                | Some({bot = _ ; join = jCod ; tyDelta = deltaCod ; iso = isoCod ; prom = promCod }) ->
                     check {
                         let! pCodDelta = kCheckProset tenv deltaCod
-                        let pResTy,pBot,pJoin,tyDelta,pIso  = makeDictionarySemilat pDomTy pCodTy dom deltaCod pDomComp jCod pCodDelta isoCod
-                        return KProper(pResTy, None, Some { bot = pBot ; join = pJoin ; tyDelta = tyDelta ; iso = pIso }, false, noRange)
+                        let pResTy,pBot,pJoin,tyDelta,pIso, pProm = makeDictionarySemilat pDomTy pCodTy dom deltaCod pDomComp jCod pCodDelta isoCod promCod
+                        return KProper(pResTy, None, Some { bot = pBot ; join = pJoin ; tyDelta = tyDelta ; iso = pIso ; prom = pProm}, false, noRange)
                     }
                 | None ->
                     Error ["Type of dictionary codomain should be a semilattice type, but " + cod.ToString() + " is not one.", rng]
@@ -670,12 +690,12 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                     None
             let! semSemilat =
                 match optSemilatL, optSemilatR with
-                | Some({bot = botL ; join = joinL ; tyDelta = deltaL ; iso = isoL }), Some({bot = botR ; join = joinR ; tyDelta = deltaR ; iso = isoR }) ->
+                | Some({bot = botL ; join = joinL ; tyDelta = deltaL ; iso = isoL ; prom = promL }), Some({bot = botR ; join = joinR ; tyDelta = deltaR ; iso = isoR ; prom = promR }) ->
                     check {
                         let! pDeltaL = kCheckProset tenv deltaL
                         let! pDeltaR = kCheckProset tenv deltaR
-                        let _, bot, join, delta, iso = makeProdSemilat pTyL pTyR botL botR joinL joinR deltaL deltaR pDeltaL pDeltaR isoL isoR
-                        return (Some {bot = bot; join = join ; tyDelta = delta ; iso = iso })
+                        let _, bot, join, delta, iso , prom = makeProdSemilat pTyL pTyR botL botR joinL joinR deltaL deltaR pDeltaL pDeltaR isoL isoR promL promR
+                        return (Some {bot = bot; join = join ; tyDelta = delta ; iso = iso ; prom = prom})
                     }
                 | _ ->
                     Result None
@@ -697,12 +717,12 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                     None
             let! semSemilat =
                 match isChainL, optTosetL, optSemilatL, optSemilatR with
-                | true, Some(compL), Some({bot = botL ; join = joinL ; tyDelta = deltaL ; iso = isoL }), Some({bot = botR ; join = joinR ; tyDelta = deltaR ; iso = isoR }) ->
+                | true, Some(compL), Some({bot = botL ; join = joinL ; tyDelta = deltaL ; iso = isoL ; prom = promL }), Some({bot = botR ; join = joinR ; tyDelta = deltaR ; iso = isoR ; prom = promR }) ->
                     check {
                         let! pDeltaL = kCheckProset tenv deltaL
                         let! pDeltaR = kCheckProset tenv deltaR
-                        let _, bot, join, delta, iso = makeLexProdSemilat pTyL pTyR botL botR compL joinR deltaL deltaR pDeltaL pDeltaR isoL isoR
-                        return (Some {bot = bot; join = join ; tyDelta = delta ; iso = iso })
+                        let _, bot, join, delta, iso, prom = makeLexProdSemilat pTyL pTyR botL botR compL joinR deltaL deltaR pDeltaL pDeltaR isoL isoR promL promR
+                        return (Some {bot = bot; join = join ; tyDelta = delta ; iso = iso ; prom = prom })
                     }
                 | _ ->
                     Result None
@@ -727,8 +747,8 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
     | IVar(elemTy, rng) ->
         check {
             let! pElemTy, pComp = withError (errorMsg + ": underlying type is not totally ordered") rng (kCheckToset tenv elemTy)
-            let resTy, bot, join, delta, iso  = makeIVarSemilat elemTy pElemTy pComp
-            return KProper(resTy, None, Some({bot = bot ; join = join ; tyDelta = delta ; iso = iso}), false, noRange) 
+            let resTy, bot, join, delta, iso, prom  = makeIVarSemilat elemTy pElemTy pComp 
+            return KProper(resTy, None, Some({bot = bot ; join = join ; tyDelta = delta ; iso = iso ; prom = prom}), false, noRange) 
         }
     | TyOp(varId, kind, body, rng) ->
         // this case is purely for checking - we don't actually generate semantics 
@@ -757,7 +777,8 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
                 let tyDelta = P.TyVar("$" + varId + "Delta")
                 let joinTy = Fun(ty,Fun(ty,ty))
                 let isoTy = Fun(ty, List(tyDelta))
-                let pTy = P.ForallTy("$" + varId, P.Fun(ty, P.Fun(joinTy, P.ForallTy("$" + varId + "Delta", P.Fun(isoTy, pBodyTy)))))
+                let promTy = Fun(tyDelta, ty)
+                let pTy = P.ForallTy("$" + varId, P.Fun(ty, P.Fun(joinTy, P.ForallTy("$" + varId + "Delta", P.Fun(isoTy, P.Fun(promTy, pBodyTy))))))
                 return KProper(pTy,None,None,false,noRange)
         }
     | Exception(tyContents, rng) ->
@@ -766,11 +787,11 @@ and kSynth (tenv : TypeEnvironment) (ty : Ty) : Check<Kind> =
             let! resTy, _, optSemi,_ = getProper "underlying type" k
             let! semi = 
                 match optSemi with
-                | Some {bot = bot'; join = join' ; tyDelta = delta' ; iso = iso'} ->
+                | Some {bot = bot'; join = join' ; tyDelta = delta' ; iso = iso' ; prom = prom'} ->
                     check {
                         let! pDelta' = kCheckProset tenv delta' 
-                        let _, bot, join, delta, iso = makeExceptionSemilat tyContents resTy delta' pDelta' bot' join' iso'
-                        return (Some {bot = bot; join = join; tyDelta = delta ; iso = iso })
+                        let _, bot, join, delta, iso, prom = makeExceptionSemilat tyContents resTy delta' pDelta' bot' join' iso' prom'
+                        return (Some {bot = bot; join = join; tyDelta = delta ; iso = iso ; prom = prom'})
                     }
                 | None ->
                     Result None

@@ -3,6 +3,7 @@
 open Microsoft.FSharp.Text.Lexing
 open System
 open CheckComputation
+open System.Transactions
 
 type Range = Position * Position
 
@@ -382,7 +383,7 @@ type SemToset = PCF.Term
 /// Posets semantically interpreted as PCF type paired with predicate (the latter irrelevant for our purposes)
 type SemPoset = PCF.Ty
 /// Semilattices semantically interpreted as tuple of PCF terms (bottom element , join operator)
-type SemSemilat = { bot : PCF.Term ; join : PCF.Term ; tyDelta : Ty ; iso : PCF.Term }
+type SemSemilat = { bot : PCF.Term ; join : PCF.Term ; tyDelta : Ty ; iso : PCF.Term ; prom : PCF.Term }
 /// Interpretation of chain type as comparison operator
 type SemChain = PCF.Term
 
@@ -426,6 +427,8 @@ type Expr =
   | Bot of ty : Ty * Range
   | Join of ty : Ty * e1 : Expr * e2 : Expr * Range
   | LessThan of e1 : Expr * e2 : Expr * Range
+  // promotes a delta to a "singleton" semilattice element
+  | Promote of tySemilat : Ty * tyDelta : Ty * eDelta : Expr * Range
   /// The eliminator for semilattice dictionaries 
   | Extract of targetTy : Ty * key : string * value : string * acc : string * dict : Expr * body : Expr * Range
   /// The constructor for semilattice dictionaries
@@ -468,6 +471,7 @@ type Expr =
     | Bot(_,rng)
     | Join(_,_,_,rng)
     | LessThan(_,_,rng)
+    | Promote(_,_,_,rng)
     | Extract(_,_,_,_,_,_,rng)
     | Cons(_,_,_,rng)
     | Fst(_,rng)
@@ -517,6 +521,8 @@ type Expr =
         "(join " + ty.ToString() + " " + e1.ToString() + " " + e2.ToString() + ")"
     | LessThan(e1, e2, _) ->
         "(" + e1.ToString() + " < " + e2.ToString() + ")"
+    | Promote(tySemilat, tyDelta, eDelta, _) ->
+        "(promote " + tySemilat.ToString() + " . " + tyDelta.ToString() + " " + eDelta.ToString() + ")"
     | Extract(targetTy,k,v,acc,dict,body,_) ->
         "let cons " + targetTy.ToString() + " " + k + " " + v + " " + acc + " = " + dict.ToString() + " in\n"
           + body.ToString() + "\nend"

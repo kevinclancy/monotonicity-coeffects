@@ -127,6 +127,11 @@ let isoNat (t : P.Term) : P.Term =
 
 let primIsoNat = P.PrimFun("isoNat", P.Prim("Nat"), P.List(P.Prim("Nat")), isoNat)
 
+let promNat (t : P.Term) : P.Term =
+    t
+
+let primPromNat = P.PrimFun("promNat", P.Prim("Nat"), P.Prim("Nat"), promNat)
+
 let joinProp (t : P.Term)  =
     match t with
     | PCFBool(a) ->
@@ -208,14 +213,14 @@ let baseTyMap =
         [("Nat", KProper(
                     P.Prim("Nat"), 
                     Some(primLessNat), 
-                    Some { bot = PrimNatVal(0) ; join = primJoinNat ; tyDelta = TyId("Nat",noRange) ; iso = primIsoNat }, 
+                    Some { bot = PrimNatVal(0) ; join = primJoinNat ; tyDelta = TyId("Nat",noRange) ; iso = primIsoNat ; prom = primPromNat }, 
                     true,
                     noRange));
 
          ("NatU", KProper(
                     pNatUpperTy,
                     Some(primLessNatUpper),
-                    Some { bot = P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ; join = primJoinNatUpper ; tyDelta = TyId("NatU", noRange) ; iso = primIsoNatUpper },
+                    Some { bot = P.In2(P.Prim("Nat"), P.Unit, P.PrimUnitVal) ; join = primJoinNatUpper ; tyDelta = TyId("NatU", noRange) ; iso = primIsoNatUpper ; prom = P.Abs("!x", pNatUpperTy, V("!x")) },
                     true,
                     noRange));
 
@@ -229,7 +234,7 @@ let baseTyMap =
          ("Prop", KProper(
                     P.Sum(P.Unit, P.Unit),
                     Some(primLessProp),
-                    Some{bot = In2(P.Unit, P.Unit, P.PrimUnitVal); join = primJoinProp ; tyDelta = TyId("Unit", noRange) ; iso = primIsoProp},
+                    Some{bot = In2(P.Unit, P.Unit, P.PrimUnitVal); join = primJoinProp ; tyDelta = TyId("Unit", noRange) ; iso = primIsoProp ; prom = P.Abs("!x", P.Sum(P.Unit, P.Unit), V("!x")) },
                     true,
                     noRange)) ;
 
@@ -570,7 +575,7 @@ let rec repl (ctxt : Typecheck.Context) =
                 try 
                     let ty = Parser.Ty(Lexer.token) lexbuffer
                     match kCheckSemilattice ctxt.tenv ty with
-                    | Result(_,_,_,ty0,_) ->
+                    | Result(_,_,_,ty0,_,_) ->
                         printfn "Semilattice formation check succeeded:\n%s is a semilattice type with delta type %s"
                                 param
                                 (ty0.ToString())

@@ -51,20 +51,20 @@ and mKeySet =
         end
     end
 
-// and mIntersect =
+and mIntersect =
 
   // here is a function that does not currently work: we have not given the programmer access to f,g,or the unit of the adjunction
   // for the semilattice type V, hence we cannot join vdelta into the result
   //
-  // fun (K : TOSET) (V : SEMILATTICE) (other : LMap K V) 
-  //  hom (self : LMap K V . (? K) * VDelta)
-  //    let cap ? kself = fst self 
-  //    and vself = snd self
-  //    and vother = (mAt !K !V other kself)
-  //    in (whenNonBot !V !V vother (join V vother vself)) //vself here as the wrong type: we need unit of adjunction
-  //    end
-  //  end
-  //end
+  fun (K : TOSET) (V : SEMILATTICE) (other : LMap K V) 
+    hom (self : LMap K V . (? K) * VDelta)
+      let cap ? kself = fst self 
+      and vself = snd self
+      and vother = (mAt !K !V other kself)
+      in (whenNonBot !(LMap K V) !V vother { kself -> (join V vother (promote (V . VDelta) vself)) : LMap K V})
+      end
+    end
+  end
 
 and mHasKey =
 
@@ -95,5 +95,7 @@ and mApplyMonotone =
 
 in
   // output: { 1 -> 4, 3 -> 8 : (LMap Nat Nat) }
-  (mApplyMonotone !Nat !Nat (fun (n : Nat) (mult n 2) end) { 1 -> 2, 3 -> 4 : (LMap Nat Nat) })
+  //( !Nat !Nat (fun (n : Nat) (mult n 2) end) { 1 -> 2, 3 -> 4 : (LMap Nat Nat) })
+  (mIntersect !Nat !Nat { 1 -> 1, 2 -> 3 : LMap Nat Nat} { 1 -> 5, 3 -> 4 : LMap Nat Nat})
+  //(promote (Nat . Nat) 3)
 end

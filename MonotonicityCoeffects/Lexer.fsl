@@ -75,6 +75,7 @@ rule token = parse
 | "cons"         { CONS }
 | "bot"          { BOT }
 | "join"         { JOIN }
+| "promote"      { PROMOTE }
 | "?"            { QUESTION }
 | "*"            { ASTERISK }
 | "^"            { CARET }
