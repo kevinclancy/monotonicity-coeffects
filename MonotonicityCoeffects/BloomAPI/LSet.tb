@@ -4,11 +4,11 @@ in
 
 let equal =
 
-	fun (A : TOSET) (x : A) (y : A)
-		(bAnd 
-		  (bNot (x < y)) 
-		  (bNot (y < x)))
-	end
+  fun (A : TOSET) (x : A) (y : A)
+    (bAnd 
+      (bNot (x < y)) 
+      (bNot (y < x)))
+  end
 
 and mContains = 
 
@@ -25,65 +25,65 @@ and mContains =
 
 and mIntersect =
 
-    fun (ElemTy : TOSET) (x : LSet ElemTy) 
-        hom (y : LSet ElemTy . (?ElemTy) * Unit)
-            let cap ? e = fst y
-            in {e -> (mContains !ElemTy e x) : LSet ElemTy}
-            end
-        end
+  fun (ElemTy : TOSET) (x : LSet ElemTy) 
+    hom (y : LSet ElemTy . (?ElemTy) * Unit)
+      let cap ? e = fst y
+      in {e -> (mContains !ElemTy e x) : LSet ElemTy}
+      end
     end
+  end
 
 // seems like "map" would be a more appropriate name
 and mProject =
     
-    fun (ElemTy : TOSET) (ResElemTy : TOSET) (p : ElemTy ->? ResElemTy + Unit)
-        hom (d : LSet ElemTy . (?ElemTy) * Unit)
-            let cap ? e = fst d
-            in
-                case (p e) to LSet ResElemTy of
-                // include (p e)
-                inl x -> { x -> known : LSet ResElemTy }
-                // exclude
-                inr x -> (bot (LSet ResElemTy))
-            end
-        end
+  fun (ElemTy : TOSET) (ResElemTy : TOSET) (p : ElemTy ->? ResElemTy + Unit)
+    hom (d : LSet ElemTy . (?ElemTy) * Unit)
+      let cap ? e = fst d
+      in
+        case (p e) to LSet ResElemTy of
+        // include (p e)
+        inl x -> { x -> known : LSet ResElemTy }
+        // exclude
+        inr x -> (bot (LSet ResElemTy))
+      end
     end
+  end
 
 and mSize = 
 
-    fun (ElemTy : TOSET) (x : LSet ElemTy) @(+ x)
-        let extract to Nat with n v acc = x
-        in (plus 1 acc)
-        end
+  fun (ElemTy : TOSET) (x : LSet ElemTy) @(+ x)
+    let extract to Nat with n v acc = x
+    in (plus 1 acc)
     end
+  end
 
 and mProduct =
 
-    // hom doesn't allow a codomain with function type, so we must use this trick 
-    // to allow multi-argument hom abstractions.
-    fun (A : TOSET) (B : TOSET) (x : LSet A) (y : LSet B)
-        ((hom (x : LSet A . (?A) * Unit) @(+ x)
-            ((hom (y : LSet B . (?B) * Unit)
-                let cap ? a = fst x
-                and cap ? b = fst y
-                in { (a , b) -> known : LSet (A * B) }
-                end
-            end) y)
-        end) x)
-    end
+  // hom doesn't allow a codomain with function type, so we must use this trick 
+  // to allow multi-argument hom abstractions.
+  fun (A : TOSET) (B : TOSET) (x : LSet A) (y : LSet B)
+    ((hom (x : LSet A . (?A) * Unit) @(+ x)
+      ((hom (y : LSet B . (?B) * Unit)
+        let cap ? a = fst x
+        and cap ? b = fst y
+        in { (a , b) -> known : LSet (A * B) }
+        end
+      end) y)
+    end) x)
+  end
 
 in 
-    // output:  {(1, 1) -> known, (1, 3) -> known, (2, 1) -> known, (2, 3) -> known : (LSet (Nat * Nat))}
-    // (mProduct !Nat !Nat { 1 -> known, 2 -> known : LSet Nat } { 1 -> known, 3 -> known : LSet Nat})
-    // output:
-    let f =
-      fun (x : Nat)
-        case (equal !Nat x 1) to (Nat + Unit) of
-        inl x -> (inr Nat Unit unit)
-        inr y -> (inl Nat Unit (mult 2 x))
-      end
-    in
-      (mProject !Nat !Nat f { 1 -> known, 2 -> known, 3 -> known : LSet Nat})
+  // output:  {(1, 1) -> known, (1, 3) -> known, (2, 1) -> known, (2, 3) -> known : (LSet (Nat * Nat))}
+  // (mProduct !Nat !Nat { 1 -> known, 2 -> known : LSet Nat } { 1 -> known, 3 -> known : LSet Nat})
+  // output:
+  let f =
+    fun (x : Nat)
+      case (equal !Nat x 1) to (Nat + Unit) of
+      inl x -> (inr Nat Unit unit)
+      inr y -> (inl Nat Unit (mult 2 x))
     end
+  in
+    (mProject !Nat !Nat f { 1 -> known, 2 -> known, 3 -> known : LSet Nat})
+  end
 end
 

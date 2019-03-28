@@ -1,4 +1,4 @@
-﻿types
+types
   LSet = typefun (x : TOSET) x |> Prop end;
   LMap = typefun (x : TOSET) (y : SEMILATTICE) x |> y end;
 in

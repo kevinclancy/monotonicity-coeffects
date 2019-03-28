@@ -4,18 +4,18 @@ in
 
 let equal =
 
-	fun (A : TOSET) (x : A) (y : A)
-		(bAnd 
-		  (bNot (x < y)) 
-		  (bNot (y < x)))
-	end
+  fun (A : TOSET) (x : A) (y : A)
+    (bAnd 
+      (bNot (x < y)) 
+      (bNot (y < x)))
+  end
 
 and whenKnown = 
 
   fun (dest : SEMILATTICE) (prop : Prop) (res : dest)
-      let extract to dest with k v acc = { unit -> prop : Unit |> Prop } in
-		res
-      end
+    let extract to dest with k v acc = { unit -> prop : Unit |> Prop } in
+      res
+    end
   end
 
 and lookup = 
@@ -23,9 +23,9 @@ and lookup =
   fun (c : GCounter) (k : Nat) @(+ c)
     let extract to Nat with k2 v acc = c
     in 
-        case (equal !Nat k k2) to Nat of
-        inl x -> v
-        inr x -> 0
+      case (equal !Nat k k2) to Nat of
+      inl x -> v
+      inr x -> 0
     end
   end
 
@@ -46,7 +46,6 @@ and mValue =
   end
 
 in 
-  
   let a = (bot GCounter)
   and b = (mIncrement a 0)
   and c = (mIncrement b 1)
@@ -54,5 +53,4 @@ in
   // output: 3
   in (mValue d)
   end
-
 end

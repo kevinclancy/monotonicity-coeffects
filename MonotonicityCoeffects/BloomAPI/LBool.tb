@@ -1,0 +1,17 @@
+﻿types
+  LBool = Prop;
+in
+
+// Since we are using Prop for the LBool type, "whenKnown" may be mor appropriate than "whenTrue"
+let mWhenTrue =
+
+  fun (dest : SEMILATTICE) (res : dest) 
+    hom (self : Prop . Unit)
+      res
+    end
+  end
+
+in
+  //output: 0
+  (mWhenTrue !Nat 3 (pAnd known unknown))
+end

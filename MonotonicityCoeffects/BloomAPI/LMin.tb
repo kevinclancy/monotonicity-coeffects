@@ -1,0 +1,24 @@
+﻿types
+  LMin = NatU;
+in
+
+let mLt =
+
+  fun (self : NatU) (m : NatU)
+    ((hom (self : NatU . NatU)
+        (ltU self m)
+      end) self) 
+    end
+
+and mLeq =
+
+  fun (self : NatU) (m : NatU)
+    ((hom (self : NatU . NatU)
+      (leqU self m)
+    end) self) 
+  end
+
+in
+  // {2 -> known : (Nat |> Prop)}
+  { 1 -> (mLt u3 u2), 2 -> (mLeq u3 u10) : Nat |> Prop }
+end
