@@ -95,7 +95,5 @@ and mApplyMonotone =
 
 in
   // output: { 1 -> 4, 3 -> 8 : (LMap Nat Nat) }
-  //( !Nat !Nat (fun (n : Nat) (mult n 2) end) { 1 -> 2, 3 -> 4 : (LMap Nat Nat) })
   (mIntersect !Nat !Nat { 1 -> 1, 2 -> 3 : LMap Nat Nat} { 1 -> 5, 3 -> 4 : LMap Nat Nat})
-  //(promote (Nat . Nat) 3)
 end
