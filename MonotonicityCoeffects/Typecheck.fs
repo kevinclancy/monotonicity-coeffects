@@ -247,7 +247,7 @@ let rec typeCheck (ctxt : Context) (expr : Expr) : Check<Ty * CoeffectMap * P.Te
             do! if (Coeffect.LessThan bodyQ.[acc] CoeffectMonotone) then
                     Result ()
                 else
-                    Error ["Expected monotone usage of " + acc + " but found " + bodyQ.[value].ToString(), rng]            
+                    Error ["Expected monotone usage of " + acc + " but found " + bodyQ.[acc].ToString(), rng]            
             let resQ = contr dictQ (bodyQ.Remove(acc).Remove(key).Remove(value))
             // pDictTerm, pBodyTerm, pKeyComp, pKeyTy, pValTy, pTargetTy
             let pBodyFun = P.Abs(key, pKeyTy, P.Abs(value, pValTy, P.Abs(acc, pTargetTy, pBodyTerm)))
