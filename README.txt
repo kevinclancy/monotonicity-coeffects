@@ -106,6 +106,7 @@ We list the types supported by the prototype:
  τ * τ - Product
  τ + τ - Sum
  τ |> τ - Dictionary
+ τ ->s τ - Function type, where s is a coeffect scalar in {+,-,*,?} 
  [ τ ] - Monotonically exception-prone computations of result type τ
  (τ τ ...) - Type application
  (typefun (x : K) τ) - Type function definition
@@ -240,6 +241,12 @@ Here τ is a semilattice type and τ₀ is its delta type. The variable x is bou
 type τ₀ in e, and we require that it is used monotonically in e. The hom abstraction
 then evaluates to the adjoint complement (along the free/forgetful adjunction between Posets and Semilats) 
 of e  as a monotone function of x, which is a semilattice homomorphism of domain τ.
+
+
+Coeffect ascriptions
+====================
+
+An expression of the form "@(+ x) e" evaluates to the value of e
 
 Examples
 --------
